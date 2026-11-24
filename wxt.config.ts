@@ -16,9 +16,6 @@ export default defineConfig({
       'sidePanel',
       'tabs',
     ],
-    host_permissions: [
-      '<all_urls>',
-    ],
     action: {
       default_popup: 'popup.html',
       default_icon: {

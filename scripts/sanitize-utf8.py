@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import json
 
 def is_valid_chromium_char(cp):
     # Chromium extensions/common/file_util.cc -> base::IsStringUTF8 -> IsValidCharacter
@@ -42,6 +43,21 @@ def sanitize_file(file_path):
 def main():
     target_dir = sys.argv[1] if len(sys.argv) > 1 else "dist"
     print(f"[Sanitize UTF-8] Checking {target_dir} for Chromium UTF-8 compliance...")
+
+    # Adjust manifest.json to remove automatic declarative content_scripts
+    manifest_path = os.path.join(target_dir, "manifest.json")
+    if os.path.exists(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        if "content_scripts" in manifest:
+            del manifest["content_scripts"]
+            print(f"[Sanitize UTF-8] Removed declarative content_scripts from {manifest_path} (using activeTab dynamic injection)")
+        if "host_permissions" in manifest:
+            del manifest["host_permissions"]
+            print(f"[Sanitize UTF-8] Removed broad host_permissions from {manifest_path}")
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+
     for root, _, files in os.walk(target_dir):
         for file in files:
             if file.endswith((".js", ".json", ".html", ".css")):
