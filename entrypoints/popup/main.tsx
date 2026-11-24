@@ -23,16 +23,18 @@ import '../../src/styles/globals.css';
 // ---- Logo ----
 function FillProLogo() {
   return (
-    <div className="flex items-center gap-2">
-      <div className="relative w-7 h-7">
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-indigo to-brand-violet rounded-lg shadow-brand" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Zap className="w-4 h-4 text-white" />
-        </div>
-      </div>
+    <div className="flex items-center gap-2.5">
+      <img
+        src="/icons/icon-32.png"
+        alt="Fill Pro"
+        className="w-7 h-7 rounded-lg shadow-sm border border-white/10"
+      />
       <div>
-        <span className="text-sm font-bold text-white">Fill Pro</span>
-        <span className="text-[9px] text-white/30 block leading-none">by toolls.io</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-bold tracking-tight text-white">Fill Pro</span>
+          <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full bg-brand-indigo/20 text-brand-indigo border border-brand-indigo/30">v1.0</span>
+        </div>
+        <span className="text-[9px] text-white/40 block leading-none mt-0.5">by toolls.io</span>
       </div>
     </div>
   );
@@ -517,14 +519,40 @@ function PopupApp() {
           <p className="text-xs text-white/40 font-medium uppercase tracking-wider">Actions</p>
 
           {!scanResult ? (
-            <QuickAction
-              icon={<ScanSearch className="w-4 h-4" />}
-              label="Scan Form"
-              onClick={handleScan}
-              loading={isScanning}
-              disabled={isChromePage}
-              variant="primary"
-            />
+            <div className="space-y-3">
+              <button
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-brand-indigo via-indigo-500 to-brand-violet text-white font-medium text-sm shadow-brand hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                onClick={handleScan}
+                disabled={isScanning || isChromePage}
+              >
+                {isScanning ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Scanning Form Elements...</span>
+                  </>
+                ) : (
+                  <>
+                    <ScanSearch className="w-4 h-4" />
+                    <span>Scan Page Form</span>
+                  </>
+                )}
+              </button>
+
+              <div className="p-3 rounded-xl border border-white/5 bg-white/[0.02] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center">
+                    <Sliders className="w-3.5 h-3.5 text-brand-indigo" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-white block">Shortcut</span>
+                    <span className="text-[10px] text-white/40">Press Alt+Shift+F anytime</span>
+                  </div>
+                </div>
+                <Button size="sm" variant="ghost" onClick={handleOpenSidePanel} icon={<PanelRight className="w-3.5 h-3.5" />}>
+                  Side Panel
+                </Button>
+              </div>
+            </div>
           ) : (
             <>
               <QuickAction

@@ -690,13 +690,18 @@ function SidePanelApp() {
       {/* Header */}
       <div className="px-4 py-3 border-b border-white/5 bg-gradient-to-r from-dark-900 to-dark-800">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-brand-indigo to-brand-violet rounded-lg flex items-center justify-center">
-              <Zap className="w-3.5 h-3.5 text-white" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/icons/icon-32.png"
+              alt="Fill Pro"
+              className="w-7 h-7 rounded-lg shadow-sm border border-white/10"
+            />
             <div>
-              <span className="text-sm font-bold text-white">Fill Pro</span>
-              <span className="text-[9px] text-white/30 ml-1">by toolls.io</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold text-white">Fill Pro</span>
+                <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full bg-brand-indigo/20 text-brand-indigo border border-brand-indigo/30">v1.0</span>
+              </div>
+              <span className="text-[9px] text-white/30 ml-0.5">by toolls.io</span>
             </div>
           </div>
           <div className="flex gap-2">
