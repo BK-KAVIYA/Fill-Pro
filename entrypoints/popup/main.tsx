@@ -115,7 +115,7 @@ function PopupApp() {
     getCurrentTab().then(tab => {
       if (tab?.url) setCurrentUrl(tab.url);
       if (tab?.id) setCurrentTabId(tab.id);
-    }).catch(() => {});
+    }).catch(() => { });
 
     loadSettings().then(s => {
       if (s) {
@@ -131,7 +131,7 @@ function PopupApp() {
           setTheme(s.general.theme);
         }
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     if (typeof chrome !== 'undefined' && chrome.storage?.session) {
       chrome.storage.session.get('geminiApiKey').then(res => {
@@ -139,7 +139,7 @@ function PopupApp() {
           setGeminiKey(res.geminiApiKey);
           setIsConnected(true);
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     // Listen for messages from background
@@ -480,7 +480,7 @@ function PopupApp() {
                     general: { ...s.general, theme: newTheme }
                   });
                 }
-              } catch {}
+              } catch { }
             }}
             aria-label="Toggle theme"
           >

@@ -27,11 +27,103 @@
       flex-direction: column;
       overflow: hidden;
       position: relative;
+      background: #0B1120;
+    }
+    .fp-preloader {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      background: #0B1120;
+      color: white;
+    }
+    .fp-header-skeleton {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      background: linear-gradient(to right, #0B1120, #111827);
+    }
+    .fp-logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .fp-logo-img {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+    }
+    .fp-title-text {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .fp-body-skeleton {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .fp-card-skeleton {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+      height: 80px;
+      animation: fpPulse 1.5s infinite;
+    }
+    .fp-btn-skeleton {
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      border-radius: 12px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      gap: 8px;
+    }
+    .fp-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: fpSpin 0.8s linear infinite;
+    }
+    @keyframes fpSpin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes fpPulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 0.3; }
     }
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div class="fp-preloader">
+      <div class="fp-header-skeleton">
+        <div class="fp-logo-wrap">
+          <img src="/icons/icon-32.png" alt="Fill Pro" class="fp-logo-img" />
+          <div>
+            <div class="fp-title-text">Fill Pro</div>
+          </div>
+        </div>
+        <div class="fp-spinner"></div>
+      </div>
+      <div class="fp-body-skeleton">
+        <div class="fp-card-skeleton"></div>
+        <div class="fp-btn-skeleton">
+          <div class="fp-spinner"></div>
+          <span>Loading Fill Pro...</span>
+        </div>
+      </div>
+    </div>
+  </div>
   <script type="module" src="./main.tsx"></script>
 </body>
 </html>
