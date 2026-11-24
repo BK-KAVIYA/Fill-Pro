@@ -9,7 +9,7 @@ import {
   ChevronRight, Sparkles, AlertTriangle, CheckCircle, XCircle,
   Loader2, Eye, Download, Trash2, RefreshCw, Upload, List,
   BarChart2, MessageSquare, BookOpen, Filter, Search,
-  PanelLeft, Lightbulb, Shield, Clock, Hash,
+  PanelLeft, Lightbulb, Shield, Clock, Hash, Sun, Moon,
 } from 'lucide-react';
 import {
   Button, Badge, StatCard, StatusDot, Toggle, Select, EmptyState,
@@ -19,6 +19,7 @@ import { useScanStore, useExecutionStore, useAIStore, useUIStore } from '../../s
 import { sendMessage } from '../../src/messaging/index.js';
 import type { FieldDescriptor, ExecutionReport, FillResult } from '../../src/types/index.js';
 import { LOCALE_PROFILES } from '../../src/constants/locales.js';
+import { loadSettings, saveSettings } from '../../src/database/db.js';
 import '../../src/styles/globals.css';
 
 // ---- Tab definitions ----
@@ -601,10 +602,16 @@ function ReportTab() {
 function SidePanelApp() {
   const { scanResult, isScanning } = useScanStore();
   const { isExecuting } = useExecutionStore();
-  const { activeTab, setActiveTab, theme } = useUIStore();
+  const { activeTab, setActiveTab, theme, setTheme } = useUIStore();
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
 
   useEffect(() => {
+    loadSettings().then(s => {
+      if (s?.general?.theme === 'light' || s?.general?.theme === 'dark') {
+        setTheme(s.general.theme);
+      }
+    }).catch(() => {});
+
     chrome.tabs.query({ active: true, currentWindow: true }).then(tabs => {
       if (tabs[0]?.id) setCurrentTabId(tabs[0].id);
     });
@@ -712,6 +719,25 @@ function SidePanelApp() {
             >
               Fill
             </Button>
+            <button
+              className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+              onClick={async () => {
+                const newTheme = theme === 'dark' ? 'light' : 'dark';
+                setTheme(newTheme);
+                try {
+                  const s = await loadSettings();
+                  if (s) {
+                    await saveSettings({
+                      ...s,
+                      general: { ...s.general, theme: newTheme }
+                    });
+                  }
+                } catch {}
+              }}
+              aria-label="Toggle theme"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             <button
               className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
               onClick={() => chrome.runtime.openOptionsPage()}

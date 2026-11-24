@@ -65,7 +65,7 @@ function SettingsApp() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-900 text-white flex flex-col">
+    <div className={cn('min-h-screen bg-dark-900 text-white flex flex-col', settings.general.theme === 'light' ? 'light' : 'dark')}>
       {/* Header */}
       <div className="sticky top-0 z-30 bg-dark-900/90 backdrop-blur-md border-b border-white/5 px-4 sm:px-8 py-3.5 sm:py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">

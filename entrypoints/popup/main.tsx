@@ -121,6 +121,9 @@ function PopupApp() {
         setPreserveExisting(!!s.general?.preserveExistingValues);
         setAiModel(s.ai?.model || 'gemini-1.5-flash');
         setLocalOnlyMode(!!s.ai?.localOnlyMode);
+        if (s.general?.theme === 'light' || s.general?.theme === 'dark') {
+          setTheme(s.general.theme);
+        }
       }
     }).catch(() => {});
 
@@ -432,7 +435,19 @@ function PopupApp() {
           />
           <button
             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            onClick={async () => {
+              const newTheme = theme === 'dark' ? 'light' : 'dark';
+              setTheme(newTheme);
+              try {
+                const s = await loadSettings();
+                if (s) {
+                  await saveSettings({
+                    ...s,
+                    general: { ...s.general, theme: newTheme }
+                  });
+                }
+              } catch {}
+            }}
             aria-label="Toggle theme"
           >
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
