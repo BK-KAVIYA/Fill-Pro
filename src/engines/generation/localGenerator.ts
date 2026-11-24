@@ -382,6 +382,15 @@ export function generateValueForField(
   const camelId = rawId.replace(/_([a-z])/g, (_, g) => g.toUpperCase());
   const generatorId = SEMANTIC_TYPES[semanticType]?.generatorId ?? camelId;
 
+  // If generator is genericText or unknown, but the HTML input requires numbers or dates, don't generate lorem text
+  if (['text', 'genericText'].includes(generatorId) || !generators[generatorId]) {
+    if (field.htmlType === 'date' || field.controlType === 'date') return generators.genericDate!(field, context);
+    if (field.htmlType === 'datetime-local' || field.controlType === 'datetime-local') return generators.genericDate!(field, context);
+    if (field.htmlType === 'month' || field.controlType === 'month') return makeValue(field, new Date().toISOString().substring(0, 7), 'genericDate', context.locale);
+    if (field.htmlType === 'time' || field.controlType === 'time') return makeValue(field, '12:00', 'time', context.locale);
+    if (field.htmlType === 'number' || field.controlType === 'number' || field.htmlType === 'range') return generators.genericNumber!(field, context);
+  }
+
   // Try specific generator first
   if (generators[generatorId]) {
     return generators[generatorId]!(field, context);

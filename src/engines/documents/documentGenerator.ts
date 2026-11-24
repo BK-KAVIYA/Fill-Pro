@@ -343,9 +343,7 @@ export async function generateDOCX(
     sections: [{ properties: {}, children: sections }],
   });
 
-  const buffer = await Packer.toBuffer(doc);
-  const uint8 = new Uint8Array(buffer);
-  const base64 = btoa(String.fromCharCode(...uint8));
+  const base64 = await Packer.toBase64String(doc);
   const fname = filename ?? `${documentType.replace(/_/g, '-')}-${Date.now()}.docx`;
 
   return {
@@ -354,7 +352,7 @@ export async function generateDOCX(
     documentType,
     filename: fname,
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    sizeBytes: uint8.length,
+    sizeBytes: Math.floor(base64.length * 0.75),
     dataBase64: base64,
     generatedAt: Date.now(),
   };

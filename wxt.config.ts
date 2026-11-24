@@ -19,9 +19,6 @@ export default defineConfig({
     host_permissions: [
       '<all_urls>',
     ],
-    optional_host_permissions: [
-      'https://generativelanguage.googleapis.com/*',
-    ],
     action: {
       default_popup: 'popup.html',
       default_icon: {
