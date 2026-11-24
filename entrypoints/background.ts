@@ -36,13 +36,6 @@ export default defineBackground(() => {
     });
     console.log(`[FillPro] v${EXTENSION_VERSION} installed`);
   });
-
-  // ---- Action click — open popup ----
-  chrome.action.onClicked.addListener((tab) => {
-    if (tab.id) {
-      chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
-    }
-  });
 });
 
 async function handleMessage(
