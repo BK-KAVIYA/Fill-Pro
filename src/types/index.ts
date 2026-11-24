@@ -503,7 +503,7 @@ export interface AppSettings {
   };
   ai: {
     enabled: boolean;
-    provider: 'gemini' | 'local';
+    provider: 'gemini' | 'openai' | 'claude' | 'local';
     model: string;
     maxRequestsPerSession: number;
     localOnlyMode: boolean;

@@ -16,7 +16,7 @@ import {
 import { useScanStore, useExecutionStore, useAIStore, useUIStore } from '../../src/stores/index.js';
 import { sendMessage, getCurrentTab } from '../../src/messaging/index.js';
 import { LOCALE_PROFILES } from '../../src/constants/locales.js';
-import { GEMINI_MODELS } from '../../src/constants/defaults.js';
+import { GEMINI_MODELS, OPENAI_MODELS, CLAUDE_MODELS, AI_PROVIDERS } from '../../src/constants/defaults.js';
 import { loadSettings, saveSettings } from '../../src/database/db.js';
 import '../../src/styles/globals.css';
 
@@ -101,9 +101,10 @@ function PopupApp() {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Settings view state
+  const [aiProvider, setAiProvider] = useState<'gemini' | 'openai' | 'claude'>('gemini');
   const [geminiKey, setGeminiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
-  const [aiModel, setAiModel] = useState('gemini-1.5-flash');
+  const [aiModel, setAiModel] = useState('gemini-3.5-flash');
   const [localOnlyMode, setLocalOnlyMode] = useState(false);
   const [testingAI, setTestingAI] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -121,8 +122,11 @@ function PopupApp() {
         setLocale(s.general?.defaultLocale || 'en-LK');
         setScenario(s.general?.defaultScenario || 'valid_data');
         setPreserveExisting(!!s.general?.preserveExistingValues);
-        setAiModel(s.ai?.model || 'gemini-1.5-flash');
+        setAiModel(s.ai?.model || 'gemini-3.5-flash');
         setLocalOnlyMode(!!s.ai?.localOnlyMode);
+        if (s.ai?.provider && s.ai.provider !== 'local') {
+          setAiProvider(s.ai.provider as any);
+        }
         if (s.general?.theme === 'light' || s.general?.theme === 'dark') {
           setTheme(s.general.theme);
         }
@@ -223,11 +227,15 @@ function PopupApp() {
     try {
       const res: any = await chrome.runtime.sendMessage({
         type: 'TEST_AI_CONNECTION',
-        payload: { apiKey: geminiKey, model: aiModel },
+        payload: { apiKey: geminiKey, model: aiModel, provider: aiProvider },
       });
       if (res?.success) {
         if (typeof chrome !== 'undefined' && chrome.storage?.session) {
-          await chrome.storage.session.set({ geminiApiKey: geminiKey }).catch(() => {});
+          await chrome.storage.session.set({
+            geminiApiKey: geminiKey,
+            aiApiKey: geminiKey,
+            aiProvider,
+          }).catch(() => {});
         }
         setIsConnected(true);
         setIsAIEnabled(true);
@@ -256,13 +264,18 @@ function PopupApp() {
         },
         ai: {
           ...current?.ai,
+          provider: aiProvider,
           model: aiModel,
           localOnlyMode,
           enabled: isAIEnabled,
         },
       });
       if (geminiKey && typeof chrome !== 'undefined' && chrome.storage?.session) {
-        await chrome.storage.session.set({ geminiApiKey: geminiKey }).catch(() => {});
+        await chrome.storage.session.set({
+          geminiApiKey: geminiKey,
+          aiApiKey: geminiKey,
+          aiProvider,
+        }).catch(() => {});
       }
       notify('success', 'Settings saved');
       setView('main');
@@ -332,7 +345,7 @@ function PopupApp() {
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-white/40 font-medium uppercase tracking-wider">Gemini AI</p>
+              <p className="text-xs text-white/40 font-medium uppercase tracking-wider">AI Assistant</p>
               <Toggle
                 checked={isAIEnabled}
                 onChange={setIsAIEnabled}
@@ -340,14 +353,27 @@ function PopupApp() {
               />
             </div>
 
+            <Select
+              label="Provider"
+              value={aiProvider}
+              onChange={(e) => {
+                const prov = e.target.value as 'gemini' | 'openai' | 'claude';
+                setAiProvider(prov);
+                if (prov === 'gemini') setAiModel('gemini-3.5-flash');
+                else if (prov === 'openai') setAiModel('gpt-4o-mini');
+                else if (prov === 'claude') setAiModel('claude-3-5-haiku-20241022');
+              }}
+              options={AI_PROVIDERS.map(p => ({ value: p.id, label: p.label }))}
+            />
+
             <div className="relative">
               <Input
-                label="Gemini API Key"
+                label={`${aiProvider === 'gemini' ? 'Gemini' : aiProvider === 'openai' ? 'OpenAI' : 'Claude'} API Key`}
                 type={showKey ? 'text' : 'password'}
                 value={geminiKey}
                 onChange={(e) => setGeminiKey(e.target.value)}
-                placeholder="AIzaSy..."
-                hint="Key stored in browser memory only"
+                placeholder={aiProvider === 'gemini' ? 'AIzaSy... or AQ....' : aiProvider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                hint="Key stored in browser session memory only"
               />
               <button
                 type="button"
@@ -362,7 +388,13 @@ function PopupApp() {
               label="Model"
               value={aiModel}
               onChange={(e) => setAiModel(e.target.value)}
-              options={GEMINI_MODELS.map(m => ({ value: m.id, label: m.label }))}
+              options={
+                aiProvider === 'gemini'
+                  ? GEMINI_MODELS.map(m => ({ value: m.id, label: m.label }))
+                  : aiProvider === 'openai'
+                  ? OPENAI_MODELS.map(m => ({ value: m.id, label: m.label }))
+                  : CLAUDE_MODELS.map(m => ({ value: m.id, label: m.label }))
+              }
             />
 
             <div className="flex gap-2">

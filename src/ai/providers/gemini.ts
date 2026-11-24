@@ -40,11 +40,16 @@ export class GeminiProvider implements AIProvider {
   private model: GenerativeModel;
   private modelId: string;
 
-  constructor(apiKey: string, modelId: string = 'gemini-1.5-flash') {
+  constructor(apiKey: string, modelId: string = 'gemini-3.5-flash') {
     if (!apiKey) throw new Error('Gemini API key is required');
     const client = new GoogleGenerativeAI(apiKey);
-    this.modelId = modelId;
-    this.model = client.getGenerativeModel({ model: modelId });
+    // Auto-migrate legacy 1.5 or unavailable model names to modern active models
+    let resolvedModel = modelId;
+    if (resolvedModel.includes('1.5') || resolvedModel.includes('2.0') || resolvedModel === 'gemini-2.5-flash' || resolvedModel === 'gemini-flash-latest') {
+      resolvedModel = 'gemini-3.5-flash';
+    }
+    this.modelId = resolvedModel;
+    this.model = client.getGenerativeModel({ model: resolvedModel });
   }
 
   async validateConnection(): Promise<ConnectionResult> {
@@ -131,6 +136,157 @@ Rules:
   }
 }
 
+// ---- OpenAI Provider ----
+export class OpenAIProvider implements AIProvider {
+  id = 'openai';
+  private apiKey: string;
+  private modelId: string;
+
+  constructor(apiKey: string, modelId: string = 'gpt-4o-mini') {
+    if (!apiKey) throw new Error('OpenAI API key is required');
+    this.apiKey = apiKey;
+    this.modelId = modelId;
+  }
+
+  async validateConnection(): Promise<ConnectionResult> {
+    const start = Date.now();
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.modelId,
+          messages: [{ role: 'user', content: 'Reply with only the word "connected"' }],
+          max_tokens: 10,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error?.message || `HTTP ${res.status}`, latencyMs: Date.now() - start };
+      }
+      const text = data.choices?.[0]?.message?.content?.toLowerCase() ?? '';
+      return {
+        success: text.includes('connected'),
+        model: this.modelId,
+        latencyMs: Date.now() - start,
+      };
+    } catch (err: any) {
+      return { success: false, error: String(err?.message || err), latencyMs: Date.now() - start };
+    }
+  }
+
+  async analyzeForm(request: FormAnalysisRequest): Promise<FormAnalysisResult> {
+    const sanitizedFields = request.fields.map(f => ({
+      id: f.id,
+      label: f.label,
+      placeholder: f.placeholder,
+      htmlType: f.htmlType,
+      ariaLabel: f.ariaLabel,
+      description: f.description,
+      section: f.section,
+    }));
+
+    const prompt = `Analyze web form fields and classify semantic meaning. Return valid JSON only.\nFields: ${JSON.stringify(sanitizedFields)}`;
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelId,
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'OpenAI request failed');
+    const parsed = JSON.parse(data.choices[0].message.content);
+    return FormAnalysisResultSchema.parse(parsed);
+  }
+}
+
+// ---- Claude (Anthropic) Provider ----
+export class ClaudeProvider implements AIProvider {
+  id = 'claude';
+  private apiKey: string;
+  private modelId: string;
+
+  constructor(apiKey: string, modelId: string = 'claude-3-5-haiku-20241022') {
+    if (!apiKey) throw new Error('Anthropic API key is required');
+    this.apiKey = apiKey;
+    this.modelId = modelId;
+  }
+
+  async validateConnection(): Promise<ConnectionResult> {
+    const start = Date.now();
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01',
+          'dangerously-allow-browser': 'true',
+        },
+        body: JSON.stringify({
+          model: this.modelId,
+          messages: [{ role: 'user', content: 'Reply with only the word "connected"' }],
+          max_tokens: 10,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error?.message || `HTTP ${res.status}`, latencyMs: Date.now() - start };
+      }
+      const text = data.content?.[0]?.text?.toLowerCase() ?? '';
+      return {
+        success: text.includes('connected'),
+        model: this.modelId,
+        latencyMs: Date.now() - start,
+      };
+    } catch (err: any) {
+      return { success: false, error: String(err?.message || err), latencyMs: Date.now() - start };
+    }
+  }
+
+  async analyzeForm(request: FormAnalysisRequest): Promise<FormAnalysisResult> {
+    const sanitizedFields = request.fields.map(f => ({
+      id: f.id,
+      label: f.label,
+      placeholder: f.placeholder,
+      htmlType: f.htmlType,
+      ariaLabel: f.ariaLabel,
+      description: f.description,
+      section: f.section,
+    }));
+
+    const prompt = `Analyze web form fields and classify semantic meaning. Return valid JSON only with keys fields, formPurpose, suggestedLocale.\nFields: ${JSON.stringify(sanitizedFields)}`;
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01',
+        'dangerously-allow-browser': 'true',
+      },
+      body: JSON.stringify({
+        model: this.modelId,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2048,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'Claude request failed');
+    const parsed = JSON.parse(data.content[0].text);
+    return FormAnalysisResultSchema.parse(parsed);
+  }
+}
+
 // ---- Local (no-AI) Provider ----
 export class LocalProvider implements AIProvider {
   id = 'local';
@@ -140,19 +296,24 @@ export class LocalProvider implements AIProvider {
   }
 
   async analyzeForm(_request: FormAnalysisRequest): Promise<FormAnalysisResult> {
-    // Local provider returns no AI classification
     return { fields: [] };
   }
 }
 
 // ---- Factory ----
 export function createAIProvider(
-  type: 'gemini' | 'local',
+  type: 'gemini' | 'openai' | 'claude' | 'local',
   apiKey?: string,
   modelId?: string
 ): AIProvider {
   if (type === 'gemini' && apiKey) {
-    return new GeminiProvider(apiKey, modelId);
+    return new GeminiProvider(apiKey, modelId || 'gemini-3.5-flash');
+  }
+  if (type === 'openai' && apiKey) {
+    return new OpenAIProvider(apiKey, modelId || 'gpt-4o-mini');
+  }
+  if (type === 'claude' && apiKey) {
+    return new ClaudeProvider(apiKey, modelId || 'claude-3-5-haiku-20241022');
   }
   return new LocalProvider();
 }

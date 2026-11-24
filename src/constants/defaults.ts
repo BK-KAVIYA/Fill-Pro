@@ -15,10 +15,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   ai: {
     enabled: false,
-    provider: 'local',
-    model: 'gemini-1.5-flash',
+    provider: 'gemini',
+    model: 'gemini-3.5-flash',
     maxRequestsPerSession: 10,
-    localOnlyMode: true,
+    localOnlyMode: false,
     screenshotAnalysis: false,
   },
   generation: {
@@ -44,9 +44,27 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Recommended)', recommended: true },
-  { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Advanced)', recommended: false },
-  { id: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash (Experimental)', recommended: false },
+  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash (Recommended)', recommended: true },
+  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', recommended: false },
+  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite (Fast)', recommended: false },
+  { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview', recommended: false },
+];
+
+export const OPENAI_MODELS = [
+  { id: 'gpt-4o-mini', label: 'GPT-4o Mini (Fast & Cheap)', recommended: true },
+  { id: 'gpt-4o', label: 'GPT-4o (Most Intelligent)', recommended: false },
+  { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', recommended: false },
+];
+
+export const CLAUDE_MODELS = [
+  { id: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (Fast)', recommended: true },
+  { id: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (Advanced)', recommended: false },
+];
+
+export const AI_PROVIDERS = [
+  { id: 'gemini', label: 'Google Gemini', placeholder: 'AIzaSy... or AQ....' },
+  { id: 'openai', label: 'OpenAI (GPT)', placeholder: 'sk-...' },
+  { id: 'claude', label: 'Anthropic Claude', placeholder: 'sk-ant-...' },
 ];
 
 export const EXTENSION_VERSION = '1.0.0';

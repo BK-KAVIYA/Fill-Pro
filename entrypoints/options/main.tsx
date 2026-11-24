@@ -9,7 +9,7 @@ import {
   CheckCircle, AlertCircle, Loader2, Trash2, Download, Upload, Eye, EyeOff, ExternalLink,
 } from 'lucide-react';
 import { Button, Badge, Card, Input, Select, Toggle, SectionHeader, cn } from '../../src/components/ui/index.js';
-import { DEFAULT_SETTINGS, GEMINI_MODELS, EXTENSION_VERSION, PUBLISHER, REPO_URL } from '../../src/constants/defaults.js';
+import { DEFAULT_SETTINGS, GEMINI_MODELS, OPENAI_MODELS, CLAUDE_MODELS, AI_PROVIDERS, EXTENSION_VERSION, PUBLISHER, REPO_URL } from '../../src/constants/defaults.js';
 import type { AppSettings } from '../../src/types/index.js';
 import { loadSettings, saveSettings } from '../../src/database/db.js';
 import { LOCALE_PROFILES } from '../../src/constants/locales.js';
@@ -212,7 +212,7 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
     try {
       const result = await chrome.runtime.sendMessage({
         type: 'TEST_AI_CONNECTION',
-        payload: { apiKey, model: settings.ai.model },
+        payload: { apiKey, model: settings.ai.model, provider: settings.ai.provider || 'gemini' },
       });
       setTestResult({
         success: result.success,
@@ -241,24 +241,43 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="AI Configuration" subtitle="Configure Gemini AI for intelligent form analysis" />
+      <SectionHeader title="AI Configuration" subtitle="Configure Gemini, OpenAI, or Claude for intelligent form analysis" />
 
       <Card>
         <div className="space-y-4">
           <Toggle
             checked={settings.ai.enabled}
             onChange={(v) => update(['ai', 'enabled'], v)}
-            label="Enable Gemini AI"
+            label="Enable AI Assistance"
+          />
+
+          <Select
+            label="AI Provider"
+            value={settings.ai.provider || 'gemini'}
+            onChange={(e) => {
+              const prov = e.target.value;
+              update(['ai', 'provider'], prov);
+              if (prov === 'gemini') update(['ai', 'model'], 'gemini-3.5-flash');
+              else if (prov === 'openai') update(['ai', 'model'], 'gpt-4o-mini');
+              else if (prov === 'claude') update(['ai', 'model'], 'claude-3-5-haiku-20241022');
+            }}
+            options={AI_PROVIDERS.map(p => ({ value: p.id, label: p.label }))}
           />
 
           <div className="relative">
             <Input
-              label="Gemini API Key"
+              label={`${(settings.ai.provider === 'openai' ? 'OpenAI' : settings.ai.provider === 'claude' ? 'Claude' : 'Gemini')} API Key`}
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your Gemini API key"
-              hint="Your key is stored in session memory only and never sent to our servers."
+              placeholder={
+                settings.ai.provider === 'openai'
+                  ? 'sk-...'
+                  : settings.ai.provider === 'claude'
+                  ? 'sk-ant-...'
+                  : 'AIzaSy... or AQ....'
+              }
+              hint="Your key is stored in session memory only and never sent to third-party tracking servers."
             />
             <button
               className="absolute right-3 top-7 text-white/40 hover:text-white"
@@ -273,7 +292,13 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
             label="Model"
             value={settings.ai.model}
             onChange={(e) => update(['ai', 'model'], e.target.value)}
-            options={GEMINI_MODELS.map(m => ({ value: m.id, label: m.label }))}
+            options={
+              settings.ai.provider === 'openai'
+                ? OPENAI_MODELS.map(m => ({ value: m.id, label: m.label }))
+                : settings.ai.provider === 'claude'
+                ? CLAUDE_MODELS.map(m => ({ value: m.id, label: m.label }))
+                : GEMINI_MODELS.map(m => ({ value: m.id, label: m.label }))
+            }
           />
 
           <div className="flex gap-2">

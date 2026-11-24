@@ -125,8 +125,8 @@ async function handleMessage(
 
     case 'TEST_AI_CONNECTION': {
       try {
-        const { apiKey, model } = message.payload;
-        const provider = createAIProvider('gemini', apiKey, model);
+        const { apiKey, model, provider: providerType = 'gemini' } = message.payload;
+        const provider = createAIProvider(providerType as any, apiKey, model);
         const result = await provider.validateConnection();
         return { success: result.success, error: result.error, latencyMs: result.latencyMs };
       } catch (err) {
