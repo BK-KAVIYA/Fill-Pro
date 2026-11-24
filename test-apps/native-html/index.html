@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fill Pro — Enterprise Form Fixture</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #1e293b; padding: 2rem; }
+    .container { max-width: 800px; margin: 0 auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    h1 { margin-top: 0; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
+    fieldset { border: 1px solid #cbd5e1; border-radius: 6px; padding: 1rem 1.5rem 1.5rem; margin-bottom: 1.5rem; }
+    legend { font-weight: 600; color: #475569; padding: 0 0.5rem; }
+    .form-group { margin-bottom: 1rem; display: flex; flex-direction: column; }
+    .form-row { display: flex; gap: 1rem; }
+    .form-row .form-group { flex: 1; }
+    label { font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem; }
+    input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="date"], input[type="url"], select, textarea {
+      padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.875rem;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; ring: 2px solid #e0e7ff; }
+    .hint { font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; }
+    .required-star { color: #ef4444; }
+    .btn-row { display: flex; gap: 1rem; margin-top: 1.5rem; }
+    button { padding: 0.625rem 1.25rem; border-radius: 6px; border: none; font-weight: 500; cursor: pointer; }
+    .btn-submit { background: #6366f1; color: white; }
+    .btn-reset { background: #e2e8f0; color: #475569; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Corporate Regulatory Application Form</h1>
+    <p>Benchmark test fixture for Fill Pro multi-signal detection, financial calculation, and document upload validation.</p>
+
+    <form id="benchmark-form" onsubmit="event.preventDefault(); alert('Form submitted!');">
+      <!-- Section 1: Applicant Information -->
+      <fieldset>
+        <legend>Applicant Personal Information</legend>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="first_name">First Name <span class="required-star">*</span></label>
+            <input type="text" id="first_name" name="firstName" required placeholder="John">
+          </div>
+          <div class="form-group">
+            <label for="last_name">Last Name <span class="required-star">*</span></label>
+            <input type="text" id="last_name" name="lastName" required placeholder="Doe">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="email_addr">Official Email Address <span class="required-star">*</span></label>
+            <input type="email" id="email_addr" name="officialEmail" required placeholder="john.doe@example.com">
+          </div>
+          <div class="form-group">
+            <label for="phone_no">Telephone / Contact Number <span class="required-star">*</span></label>
+            <input type="tel" id="phone_no" name="contactNumber" required placeholder="+94 77 123 4567">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="dob">Date of Birth</label>
+            <input type="date" id="dob" name="birthDate">
+          </div>
+          <div class="form-group">
+            <label for="nat_id">National Identity Card / NIC</label>
+            <input type="text" id="nat_id" name="nationalId" placeholder="199012345678">
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Section 2: Corporate Information -->
+      <fieldset>
+        <legend>Company & Entity Details</legend>
+        <div class="form-group">
+          <label for="comp_name">Company Legal Name <span class="required-star">*</span></label>
+          <input type="text" id="comp_name" name="companyLegalName" required placeholder="Example Solutions Ltd">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <!-- Ambiguous ID test -->
+            <label for="f_reg_928">Business Registration Number <span class="required-star">*</span></label>
+            <input type="text" id="f_reg_928" name="txt_001" required placeholder="PV12345">
+            <span class="hint">Format as stated in Certificate of Incorporation</span>
+          </div>
+          <div class="form-group">
+            <label for="inc_date">Date of Incorporation</label>
+            <input type="date" id="inc_date" name="incorporationDate">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="country_select">Country of Domicile <span class="required-star">*</span></label>
+            <select id="country_select" name="country" required>
+              <option value="">-- Select Country --</option>
+              <option value="LK">Sri Lanka</option>
+              <option value="US">United States</option>
+              <option value="GB">United Kingdom</option>
+              <option value="AU">Australia</option>
+              <option value="SG">Singapore</option>
+              <option value="IN">India</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="num_emp">Total Employee Headcount</label>
+            <input type="number" id="num_emp" name="employeeCount" min="1" max="10000" placeholder="50">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="business_desc">Brief Business Description</label>
+          <textarea id="business_desc" name="description" rows="3" placeholder="Provide overview of commercial operations..."></textarea>
+        </div>
+      </fieldset>
+
+      <!-- Section 3: Financial Reporting -->
+      <fieldset>
+        <legend>Annual Financial Declarations</legend>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="curr_code">Reporting Currency <span class="required-star">*</span></label>
+            <select id="curr_code" name="currency" required>
+              <option value="LKR">LKR — Sri Lankan Rupee</option>
+              <option value="USD">USD — US Dollar</option>
+              <option value="EUR">EUR — Euro</option>
+              <option value="GBP">GBP — British Pound</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="fin_rev">Annual Turnover / Gross Revenue <span class="required-star">*</span></label>
+            <input type="number" id="fin_rev" name="annualRevenue" required min="0" placeholder="25000000">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tot_assets">Total Balance Sheet Assets <span class="required-star">*</span></label>
+            <input type="number" id="tot_assets" name="totalAssets" required min="0" placeholder="40000000">
+          </div>
+          <div class="form-group">
+            <label for="tot_liab">Total Liabilities</label>
+            <input type="number" id="tot_liab" name="totalLiabilities" min="0" placeholder="15000000">
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Section 4: Supporting Document Uploads -->
+      <fieldset>
+        <legend>Supporting Documentation</legend>
+        <div class="form-group">
+          <label for="fin_statement_doc">Audited Financial Statements (PDF / XLSX) <span class="required-star">*</span></label>
+          <input type="file" id="fin_statement_doc" name="financialStatements" accept=".pdf,.xlsx" required>
+          <span class="hint">Maximum file size: 5 MB</span>
+        </div>
+
+        <div class="form-group">
+          <label for="comp_profile_doc">Company Profile Dossier (PDF / DOCX)</label>
+          <input type="file" id="comp_profile_doc" name="companyProfile" accept=".pdf,.docx">
+          <span class="hint">Attach detailed capabilities summary</span>
+        </div>
+      </fieldset>
+
+      <!-- Section 5: Security & Verification (Must be SKIPPED by Fill Pro) -->
+      <fieldset>
+        <legend>Security Verification (Should NOT be automatically filled)</legend>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="account_pwd">Account Security Password <span class="required-star">*</span></label>
+            <input type="password" id="account_pwd" name="password" required>
+            <span class="hint">Fill Pro must skip passwords by default</span>
+          </div>
+          <div class="form-group">
+            <label for="sms_otp">Verification SMS Code / OTP</label>
+            <input type="text" id="sms_otp" name="otpCode" maxlength="6" placeholder="123456" autocomplete="one-time-code">
+            <span class="hint">Fill Pro must skip OTP verification fields</span>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="btn-row">
+        <button type="submit" class="btn-submit">Submit Application</button>
+        <button type="reset" class="btn-reset">Reset Form</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>
