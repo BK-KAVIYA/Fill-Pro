@@ -55,6 +55,11 @@ def main():
         if "host_permissions" in manifest:
             del manifest["host_permissions"]
             print(f"[Sanitize UTF-8] Removed broad host_permissions from {manifest_path}")
+        if "options_ui" in manifest:
+            manifest["options_ui"]["open_in_tab"] = True
+            print(f"[Sanitize UTF-8] Enforced options_ui.open_in_tab = true in {manifest_path}")
+        else:
+            manifest["options_ui"] = {"page": "options.html", "open_in_tab": True}
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
 

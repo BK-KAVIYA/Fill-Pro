@@ -488,8 +488,15 @@ function PopupApp() {
           </button>
           <button
             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-            onClick={() => setView('settings')}
+            onClick={() => {
+              if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+                chrome.runtime.openOptionsPage();
+              } else {
+                window.open(chrome.runtime?.getURL ? chrome.runtime.getURL('options.html') : 'options.html', '_blank');
+              }
+            }}
             aria-label="Settings"
+            title="Open Settings (Full Page)"
           >
             <Settings className="w-4 h-4" />
           </button>
