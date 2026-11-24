@@ -14,7 +14,6 @@ export default defineConfig({
       'scripting',
       'storage',
       'sidePanel',
-      'tabs',
     ],
     action: {
       default_popup: 'popup.html',
