@@ -112,32 +112,36 @@ function PopupApp() {
     getCurrentTab().then(tab => {
       if (tab?.url) setCurrentUrl(tab.url);
       if (tab?.id) setCurrentTabId(tab.id);
-    });
+    }).catch(() => {});
 
     loadSettings().then(s => {
       if (s) {
-        setLocale(s.general.defaultLocale || 'en-LK');
-        setScenario(s.general.defaultScenario || 'valid_data');
-        setPreserveExisting(!!s.general.preserveExistingValues);
-        setAiModel(s.ai.model || 'gemini-1.5-flash');
-        setLocalOnlyMode(!!s.ai.localOnlyMode);
+        setLocale(s.general?.defaultLocale || 'en-LK');
+        setScenario(s.general?.defaultScenario || 'valid_data');
+        setPreserveExisting(!!s.general?.preserveExistingValues);
+        setAiModel(s.ai?.model || 'gemini-1.5-flash');
+        setLocalOnlyMode(!!s.ai?.localOnlyMode);
       }
-    });
+    }).catch(() => {});
 
-    chrome.storage.session.get('geminiApiKey').then(res => {
-      if (res?.geminiApiKey) {
-        setGeminiKey(res.geminiApiKey);
-        setIsConnected(true);
-      }
-    });
+    if (typeof chrome !== 'undefined' && chrome.storage?.session) {
+      chrome.storage.session.get('geminiApiKey').then(res => {
+        if (res?.geminiApiKey) {
+          setGeminiKey(res.geminiApiKey);
+          setIsConnected(true);
+        }
+      }).catch(() => {});
+    }
 
     // Listen for messages from background
-    chrome.runtime.onMessage.addListener((msg) => {
-      if (msg.type === 'SCAN_RESULT') {
-        setScanResult(msg.payload);
-        setIsScanning(false);
-      }
-    });
+    if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (msg.type === 'SCAN_RESULT') {
+          setScanResult(msg.payload);
+          setIsScanning(false);
+        }
+      });
+    }
   }, []);
 
   const notify = useCallback((type: 'success' | 'error', text: string) => {
@@ -217,7 +221,9 @@ function PopupApp() {
         payload: { apiKey: geminiKey, model: aiModel },
       });
       if (res?.success) {
-        await chrome.storage.session.set({ geminiApiKey: geminiKey });
+        if (typeof chrome !== 'undefined' && chrome.storage?.session) {
+          await chrome.storage.session.set({ geminiApiKey: geminiKey }).catch(() => {});
+        }
         setIsConnected(true);
         setIsAIEnabled(true);
         setAiTestResult({ success: true, message: `Connected! (${res.latencyMs || 100}ms)` });
@@ -250,8 +256,8 @@ function PopupApp() {
           enabled: isAIEnabled,
         },
       });
-      if (geminiKey) {
-        await chrome.storage.session.set({ geminiApiKey: geminiKey });
+      if (geminiKey && typeof chrome !== 'undefined' && chrome.storage?.session) {
+        await chrome.storage.session.set({ geminiApiKey: geminiKey }).catch(() => {});
       }
       notify('success', 'Settings saved');
       setView('main');
@@ -271,7 +277,7 @@ function PopupApp() {
 
   if (view === 'settings') {
     return (
-      <div className={cn('w-full h-[580px] max-h-[600px] bg-dark-900 text-white flex flex-col overflow-hidden', theme)}>
+      <div className={cn('w-full h-full bg-dark-900 text-white flex flex-col overflow-hidden', theme)}>
         {/* Settings Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-gradient-to-r from-dark-900 to-dark-800 shrink-0">
           <div className="flex items-center gap-2">
@@ -415,7 +421,7 @@ function PopupApp() {
   }
 
   return (
-    <div className={cn('w-full h-[580px] max-h-[600px] bg-dark-900 text-white flex flex-col overflow-hidden', theme)}>
+    <div className={cn('w-full h-full bg-dark-900 text-white flex flex-col overflow-hidden', theme)}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-gradient-to-r from-dark-900 to-dark-800 shrink-0">
         <FillProLogo />
