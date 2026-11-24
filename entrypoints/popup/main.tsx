@@ -7,14 +7,17 @@ import { createRoot } from 'react-dom/client';
 import {
   Zap, Settings, Sun, Moon, ScanSearch, Wand2, FileText,
   Sparkles, AlertCircle, CheckCircle, Loader2, ChevronRight,
-  Layers, Upload, Eye, RotateCcw, PanelRight, Info
+  Layers, Upload, Eye, EyeOff, RotateCcw, PanelRight, Info,
+  ArrowLeft, ExternalLink, Save, Sliders, Shield
 } from 'lucide-react';
 import {
-  Button, Badge, StatCard, StatusDot, Toggle, Select, EmptyState, cn,
+  Button, Badge, StatCard, StatusDot, Toggle, Select, Input, EmptyState, cn,
 } from '../../src/components/ui/index.js';
 import { useScanStore, useExecutionStore, useAIStore, useUIStore } from '../../src/stores/index.js';
 import { sendMessage, getCurrentTab } from '../../src/messaging/index.js';
 import { LOCALE_PROFILES } from '../../src/constants/locales.js';
+import { GEMINI_MODELS } from '../../src/constants/defaults.js';
+import { loadSettings, saveSettings } from '../../src/database/db.js';
 import '../../src/styles/globals.css';
 
 // ---- Logo ----
@@ -84,9 +87,10 @@ function QuickAction({ icon, label, onClick, loading, disabled, variant = 'secon
 function PopupApp() {
   const { scanResult, isScanning, scanError, setScanResult, setIsScanning, setScanError } = useScanStore();
   const { isExecuting, progress } = useExecutionStore();
-  const { isAIEnabled, isConnected } = useAIStore();
+  const { isAIEnabled, isConnected, setIsAIEnabled, setIsConnected } = useAIStore();
   const { theme, setTheme } = useUIStore();
 
+  const [view, setView] = useState<'main' | 'settings'>('main');
   const [currentUrl, setCurrentUrl] = useState<string>('');
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
   const [locale, setLocale] = useState('en-LK');
@@ -94,12 +98,37 @@ function PopupApp() {
   const [preserveExisting, setPreserveExisting] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Settings view state
+  const [geminiKey, setGeminiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [aiModel, setAiModel] = useState('gemini-1.5-flash');
+  const [localOnlyMode, setLocalOnlyMode] = useState(false);
+  const [testingAI, setTestingAI] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   const isChromePage = currentUrl.startsWith('chrome://') || currentUrl.startsWith('chrome-extension://');
 
   useEffect(() => {
     getCurrentTab().then(tab => {
       if (tab?.url) setCurrentUrl(tab.url);
       if (tab?.id) setCurrentTabId(tab.id);
+    });
+
+    loadSettings().then(s => {
+      if (s) {
+        setLocale(s.general.defaultLocale || 'en-LK');
+        setScenario(s.general.defaultScenario || 'valid_data');
+        setPreserveExisting(!!s.general.preserveExistingValues);
+        setAiModel(s.ai.model || 'gemini-1.5-flash');
+        setLocalOnlyMode(!!s.ai.localOnlyMode);
+      }
+    });
+
+    chrome.storage.session.get('geminiApiKey').then(res => {
+      if (res?.geminiApiKey) {
+        setGeminiKey(res.geminiApiKey);
+        setIsConnected(true);
+      }
     });
 
     // Listen for messages from background
@@ -178,6 +207,59 @@ function PopupApp() {
     notify('success', 'Undo applied');
   };
 
+  const handleTestAI = async () => {
+    if (!geminiKey) return;
+    setTestingAI(true);
+    setAiTestResult(null);
+    try {
+      const res: any = await chrome.runtime.sendMessage({
+        type: 'TEST_AI_CONNECTION',
+        payload: { apiKey: geminiKey, model: aiModel },
+      });
+      if (res?.success) {
+        await chrome.storage.session.set({ geminiApiKey: geminiKey });
+        setIsConnected(true);
+        setIsAIEnabled(true);
+        setAiTestResult({ success: true, message: `Connected! (${res.latencyMs || 100}ms)` });
+      } else {
+        setAiTestResult({ success: false, message: res?.error || 'Connection failed' });
+      }
+    } catch (err: any) {
+      setAiTestResult({ success: false, message: String(err?.message || err) });
+    } finally {
+      setTestingAI(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      const current = await loadSettings();
+      await saveSettings({
+        ...current,
+        general: {
+          ...current?.general,
+          defaultLocale: locale,
+          defaultScenario: scenario,
+          preserveExistingValues: preserveExisting,
+          theme,
+        },
+        ai: {
+          ...current?.ai,
+          model: aiModel,
+          localOnlyMode,
+          enabled: isAIEnabled,
+        },
+      });
+      if (geminiKey) {
+        await chrome.storage.session.set({ geminiApiKey: geminiKey });
+      }
+      notify('success', 'Settings saved');
+      setView('main');
+    } catch {
+      notify('error', 'Could not save settings');
+    }
+  };
+
   const localeOptions = Object.values(LOCALE_PROFILES).map(l => ({ value: l.id, label: l.label }));
   const scenarioOptions = [
     { value: 'valid_data', label: 'Valid Data' },
@@ -187,10 +269,155 @@ function PopupApp() {
     { value: 'international', label: 'International' },
   ];
 
+  if (view === 'settings') {
+    return (
+      <div className={cn('w-full h-[580px] max-h-[600px] bg-dark-900 text-white flex flex-col overflow-hidden', theme)}>
+        {/* Settings Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-gradient-to-r from-dark-900 to-dark-800 shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+              onClick={() => setView('main')}
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-bold text-white">Settings</span>
+          </div>
+          <button
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-brand-indigo hover:text-brand-violet hover:bg-brand-indigo/10 transition-colors"
+            onClick={() => chrome.runtime.openOptionsPage()}
+            title="Open full page settings tab"
+          >
+            <span>Full Page</span>
+            <ExternalLink className="w-3 h-3" />
+          </button>
+        </div>
+
+        {/* Scrollable Settings Form */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-h-0">
+          <div className="space-y-3">
+            <p className="text-xs text-white/40 font-medium uppercase tracking-wider">General</p>
+            <Select
+              label="Default Locale"
+              value={locale}
+              onChange={(e) => setLocale(e.target.value)}
+              options={localeOptions}
+            />
+            <Select
+              label="Default Scenario"
+              value={scenario}
+              onChange={(e) => setScenario(e.target.value)}
+              options={scenarioOptions}
+            />
+            <Toggle
+              checked={preserveExisting}
+              onChange={setPreserveExisting}
+              label="Preserve existing field values"
+            />
+          </div>
+
+          <hr className="border-white/5" />
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-white/40 font-medium uppercase tracking-wider">Gemini AI</p>
+              <Toggle
+                checked={isAIEnabled}
+                onChange={setIsAIEnabled}
+                label=""
+              />
+            </div>
+
+            <div className="relative">
+              <Input
+                label="Gemini API Key"
+                type={showKey ? 'text' : 'password'}
+                value={geminiKey}
+                onChange={(e) => setGeminiKey(e.target.value)}
+                placeholder="AIzaSy..."
+                hint="Key stored in browser memory only"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-7 text-white/40 hover:text-white"
+                onClick={() => setShowKey(!showKey)}
+              >
+                {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            <Select
+              label="Model"
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              options={GEMINI_MODELS.map(m => ({ value: m.id, label: m.label }))}
+            />
+
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleTestAI}
+                loading={testingAI}
+                disabled={!geminiKey}
+                icon={<CheckCircle className="w-3.5 h-3.5" />}
+              >
+                Test Key
+              </Button>
+              {geminiKey && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    await chrome.storage.session.remove('geminiApiKey');
+                    setGeminiKey('');
+                    setIsConnected(false);
+                    setIsAIEnabled(false);
+                    setAiTestResult(null);
+                  }}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  Clear Key
+                </Button>
+              )}
+            </div>
+
+            {aiTestResult && (
+              <div className={cn(
+                'flex items-center gap-2 p-2.5 rounded-lg text-xs',
+                aiTestResult.success ? 'bg-success/20 text-green-400' : 'bg-error/20 text-red-400'
+              )}>
+                {aiTestResult.success ? <CheckCircle className="w-3.5 h-3.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
+                {aiTestResult.message}
+              </div>
+            )}
+
+            <Toggle
+              checked={localOnlyMode}
+              onChange={setLocalOnlyMode}
+              label="Local-only mode (disable all AI requests)"
+            />
+          </div>
+        </div>
+
+        {/* Settings Footer */}
+        <div className="p-3 border-t border-white/5 bg-dark-900 flex items-center justify-between shrink-0">
+          <Button variant="ghost" size="sm" onClick={() => setView('main')}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleSaveSettings} icon={<Save className="w-3.5 h-3.5" />}>
+            Save Changes
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={cn('w-[400px] min-h-[500px] bg-dark-900 text-white flex flex-col', theme)}>
+    <div className={cn('w-full h-[580px] max-h-[600px] bg-dark-900 text-white flex flex-col overflow-hidden', theme)}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-gradient-to-r from-dark-900 to-dark-800">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-gradient-to-r from-dark-900 to-dark-800 shrink-0">
         <FillProLogo />
         <div className="flex items-center gap-2">
           <StatusDot
@@ -206,7 +433,7 @@ function PopupApp() {
           </button>
           <button
             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-            onClick={() => chrome.runtime.openOptionsPage()}
+            onClick={() => setView('settings')}
             aria-label="Settings"
           >
             <Settings className="w-4 h-4" />
@@ -217,7 +444,7 @@ function PopupApp() {
       {/* Notification */}
       {notification && (
         <div className={cn(
-          'mx-4 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-sm animate-slide-down',
+          'mx-4 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-sm animate-slide-down shrink-0',
           notification.type === 'success' ? 'bg-success/20 text-green-400 border border-success/30' : 'bg-error/20 text-red-400 border border-error/30'
         )}>
           {notification.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
@@ -225,7 +452,7 @@ function PopupApp() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {/* Current Page */}
         <div className="px-4 pt-3 pb-2">
           <div className="glass rounded-lg p-3 space-y-2">
@@ -388,7 +615,7 @@ function PopupApp() {
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2 border-t border-white/5 flex items-center justify-between">
+      <div className="px-4 py-2 border-t border-white/5 flex items-center justify-between shrink-0 bg-dark-900">
         <span className="text-[10px] text-white/20">Fill Pro v1.0.0 — toolls.io</span>
         <span className="text-[10px] text-white/20">Open source • MIT</span>
       </div>

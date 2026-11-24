@@ -65,21 +65,22 @@ function SettingsApp() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-900 text-white">
+    <div className="min-h-screen bg-dark-900 text-white flex flex-col">
       {/* Header */}
-      <div className="bg-gradient-to-r from-dark-900 via-dark-800 to-dark-900 border-b border-white/5 px-8 py-5">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-brand-indigo to-brand-violet rounded-xl flex items-center justify-center shadow-brand">
+      <div className="sticky top-0 z-30 bg-dark-900/90 backdrop-blur-md border-b border-white/5 px-4 sm:px-8 py-3.5 sm:py-4">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 shrink-0 bg-gradient-to-br from-brand-indigo to-brand-violet rounded-xl flex items-center justify-center shadow-brand">
               <Settings className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">Fill Pro Settings</h1>
-              <p className="text-xs text-white/40">Configure your intelligent form-filling experience</p>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-white truncate">Fill Pro Settings</h1>
+              <p className="text-xs text-white/40 hidden sm:block truncate">Configure your intelligent form-filling experience</p>
             </div>
           </div>
           <Button
             variant={saved ? 'success' : 'primary'}
+            size="sm"
             onClick={handleSave}
             icon={saved ? <CheckCircle className="w-4 h-4" /> : undefined}
           >
@@ -88,28 +89,28 @@ function SettingsApp() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto flex gap-6 p-8">
-        {/* Sidebar */}
-        <div className="w-48 shrink-0 space-y-1">
+      <div className="max-w-5xl mx-auto w-full flex flex-col md:flex-row gap-5 p-4 sm:p-6 md:p-8 flex-1">
+        {/* Navigation Sidebar / Horizontal Pills on mobile */}
+        <div className="flex md:flex-col overflow-x-auto md:overflow-visible scrollbar-none gap-1.5 shrink-0 md:w-52 pb-2 md:pb-0 border-b md:border-b-0 border-white/5">
           {SETTINGS_TABS.map(tab => (
             <button
               key={tab.id}
               className={cn(
-                'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors',
+                'flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-colors shrink-0',
                 activeTab === tab.id
                   ? 'bg-brand-indigo/20 text-brand-indigo border border-brand-indigo/30'
-                  : 'text-white/50 hover:text-white hover:bg-white/5'
+                  : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
               )}
               onClick={() => setActiveTab(tab.id)}
             >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
+              <tab.icon className="w-4 h-4 shrink-0" />
+              <span>{tab.label}</span>
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 space-y-6">
+        <div className="flex-1 min-w-0 space-y-6">
           {activeTab === 'general' && (
             <GeneralTab settings={settings} update={update} />
           )}
@@ -371,7 +372,7 @@ function GenerationTab({ settings, update }: { settings: AppSettings; update: (p
             ]}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Number Min"
               type="number"

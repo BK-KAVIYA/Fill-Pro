@@ -40,6 +40,10 @@ export default defineConfig({
     side_panel: {
       default_path: 'sidepanel.html',
     },
+    options_ui: {
+      page: 'options.html',
+      open_in_tab: true,
+    },
     commands: {
       '_execute_action': {
         suggested_key: {
