@@ -39,6 +39,9 @@ function SettingsApp() {
 
   const handleSave = async () => {
     await saveSettings(settings);
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED', payload: settings }).catch(() => {});
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -206,6 +209,21 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.session?.get(['geminiApiKey', 'apiKey']).then(res => {
+        const k = res?.geminiApiKey || res?.apiKey;
+        if (k) setApiKey(k);
+        else {
+          chrome.storage.local?.get(['geminiApiKey', 'apiKey']).then(lres => {
+            const lk = lres?.geminiApiKey || lres?.apiKey;
+            if (lk) setApiKey(lk);
+          });
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   const handleTestConnection = async () => {
     if (!apiKey) return;
     setTesting(true);
@@ -221,9 +239,13 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
           : result.error ?? 'Connection failed',
       });
       if (result.success) {
-        // Store key in session storage
-        await chrome.storage.session.set({ geminiApiKey: apiKey });
+        // Store key in session and local storage
+        await chrome.storage.session?.set({ geminiApiKey: apiKey, apiKey });
+        await chrome.storage.local?.set({ geminiApiKey: apiKey, apiKey });
         update(['ai', 'enabled'], true);
+        if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+          chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' }).catch(() => {});
+        }
       }
     } catch (err) {
       setTestResult({ success: false, message: String(err) });
@@ -233,10 +255,28 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
   };
 
   const handleRemoveKey = async () => {
-    await chrome.storage.session.remove('geminiApiKey');
+    await chrome.storage.session?.remove(['geminiApiKey', 'apiKey']);
+    await chrome.storage.local?.remove(['geminiApiKey', 'apiKey']);
     setApiKey('');
     setTestResult(null);
     update(['ai', 'enabled'], false);
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' }).catch(() => {});
+    }
+  };
+
+  const handleKeyChange = (val: string) => {
+    const trimmed = val.trim();
+    setApiKey(trimmed);
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      if (trimmed) {
+        chrome.storage.session?.set({ geminiApiKey: trimmed, apiKey: trimmed }).catch(() => {});
+        chrome.storage.local?.set({ geminiApiKey: trimmed, apiKey: trimmed }).catch(() => {});
+      } else {
+        chrome.storage.session?.remove(['geminiApiKey', 'apiKey']).catch(() => {});
+        chrome.storage.local?.remove(['geminiApiKey', 'apiKey']).catch(() => {});
+      }
+    }
   };
 
   return (
@@ -247,7 +287,12 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
         <div className="space-y-4">
           <Toggle
             checked={settings.ai.enabled}
-            onChange={(v) => update(['ai', 'enabled'], v)}
+            onChange={(v) => {
+              update(['ai', 'enabled'], v);
+              if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' }).catch(() => {});
+              }
+            }}
             label="Enable AI Assistance"
           />
 
@@ -269,7 +314,7 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
               label={`${(settings.ai.provider === 'openai' ? 'OpenAI' : settings.ai.provider === 'claude' ? 'Claude' : 'Gemini')} API Key`}
               type={showKey ? 'text' : 'password'}
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) => handleKeyChange(e.target.value)}
               placeholder={
                 settings.ai.provider === 'openai'
                   ? 'sk-...'

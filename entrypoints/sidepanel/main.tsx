@@ -9,7 +9,7 @@ import {
   ChevronRight, Sparkles, AlertTriangle, CheckCircle, XCircle,
   Loader2, Eye, Download, Trash2, RefreshCw, Upload, List,
   BarChart2, MessageSquare, BookOpen, Filter, Search,
-  PanelLeft, Lightbulb, Shield, Clock, Hash, Sun, Moon,
+  PanelLeft, Lightbulb, Shield, Clock, Hash, Sun, Moon, ExternalLink,
 } from 'lucide-react';
 import {
   Button, Badge, StatCard, StatusDot, Toggle, Select, EmptyState,
@@ -178,19 +178,44 @@ function AIAssistantTab() {
         subtitle="Describe what you want to generate"
       />
 
-      {!isAIEnabled && (
+      {!isAIEnabled ? (
         <Card>
-          <div className="flex items-start gap-3 text-sm">
-            <Shield className="w-5 h-5 text-brand-indigo shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-white">AI is disabled</p>
-              <p className="text-white/50 text-xs mt-1">
-                Enable Gemini in Settings to use AI-powered field classification and natural language instructions.
-                Fill Pro works fully in local mode.
-              </p>
+          <div className="flex items-start justify-between gap-3 text-sm">
+            <div className="flex items-start gap-3 min-w-0">
+              <Shield className="w-5 h-5 text-brand-indigo shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-white">AI Assistant is disabled</p>
+                <p className="text-white/50 text-xs mt-1">
+                  Enable Gemini, OpenAI, or Claude in Settings to use AI-powered field classification and natural language instructions. Fill Pro works fully in local mode.
+                </p>
+              </div>
             </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => chrome.runtime.openOptionsPage()}
+              icon={<ExternalLink className="w-3.5 h-3.5" />}
+              className="shrink-0"
+            >
+              Settings
+            </Button>
           </div>
         </Card>
+      ) : (
+        <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-brand-indigo/10 border border-brand-indigo/20 text-xs">
+          <div className="flex items-center gap-2">
+            <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-green-400 animate-pulse" : "bg-yellow-400")} />
+            <span className="text-white font-medium">AI Assistant Active</span>
+            <span className="text-white/50">{isConnected ? '(Connected)' : '(API Key required in Settings)'}</span>
+          </div>
+          <button
+            onClick={() => chrome.runtime.openOptionsPage()}
+            className="text-brand-indigo hover:text-white transition-colors text-xs font-medium flex items-center gap-1"
+          >
+            <span>Settings</span>
+            <ExternalLink className="w-3 h-3" />
+          </button>
+        </div>
       )}
 
       <div className="space-y-3">
@@ -606,17 +631,57 @@ function SidePanelApp() {
   const [currentTabId, setCurrentTabId] = useState<number | null>(null);
 
   useEffect(() => {
-    loadSettings().then(s => {
-      if (s?.general?.theme === 'light' || s?.general?.theme === 'dark') {
-        setTheme(s.general.theme);
-      }
-    }).catch(() => {});
+    const syncSettings = async () => {
+      try {
+        const s = await loadSettings();
+        if (s) {
+          if (s.general?.theme === 'light' || s.general?.theme === 'dark') {
+            setTheme(s.general.theme);
+          }
+          const aiStore = useAIStore.getState();
+          aiStore.setIsAIEnabled(!!s.ai?.enabled);
+          if (s.ai?.model) aiStore.setModel(s.ai.model);
+
+          // Check if API key exists in session or local storage
+          let k = '';
+          if (typeof chrome !== 'undefined' && chrome.storage) {
+            const sRes = await chrome.storage.session?.get(['geminiApiKey', 'apiKey']);
+            k = sRes?.geminiApiKey || sRes?.apiKey || '';
+            if (!k) {
+              const lRes = await chrome.storage.local?.get(['geminiApiKey', 'apiKey']);
+              k = lRes?.geminiApiKey || lRes?.apiKey || '';
+            }
+          }
+          if (k) {
+            aiStore.setApiKey(k);
+            aiStore.setConnectionStatus(true);
+          } else {
+            aiStore.setApiKey(null);
+            aiStore.setConnectionStatus(false, 'API key required');
+          }
+        }
+      } catch { }
+    };
+
+    syncSettings();
+
+    window.addEventListener('focus', syncSettings);
+
+    const onStorageChange = () => {
+      syncSettings();
+    };
+    if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+      chrome.storage.onChanged.addListener(onStorageChange);
+    }
 
     chrome.tabs.query({ active: true, currentWindow: true }).then(tabs => {
       if (tabs[0]?.id) setCurrentTabId(tabs[0].id);
     });
 
-    chrome.runtime.onMessage.addListener((msg) => {
+    const msgHandler = (msg: any) => {
+      if (msg.type === 'SETTINGS_UPDATED') {
+        syncSettings();
+      }
       const store = useScanStore.getState();
       const execStore = useExecutionStore.getState();
       if (msg.type === 'SCAN_RESULT') store.setScanResult(msg.payload);
@@ -626,7 +691,17 @@ function SidePanelApp() {
         execStore.setIsExecuting(false);
         setActiveTab('report');
       }
-    });
+    };
+
+    chrome.runtime?.onMessage?.addListener(msgHandler);
+
+    return () => {
+      window.removeEventListener('focus', syncSettings);
+      if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+        chrome.storage.onChanged.removeListener(onStorageChange);
+      }
+      chrome.runtime?.onMessage?.removeListener(msgHandler);
+    };
   }, []);
 
   const handleScan = async () => {

@@ -122,6 +122,7 @@ function PopupApp() {
         setLocale(s.general?.defaultLocale || 'en-LK');
         setScenario(s.general?.defaultScenario || 'valid_data');
         setPreserveExisting(!!s.general?.preserveExistingValues);
+        setIsAIEnabled(!!s.ai?.enabled);
         setAiModel(s.ai?.model || 'gemini-3.5-flash');
         setLocalOnlyMode(!!s.ai?.localOnlyMode);
         if (s.ai?.provider && s.ai.provider !== 'local') {
@@ -133,11 +134,20 @@ function PopupApp() {
       }
     }).catch(() => { });
 
-    if (typeof chrome !== 'undefined' && chrome.storage?.session) {
-      chrome.storage.session.get('geminiApiKey').then(res => {
-        if (res?.geminiApiKey) {
-          setGeminiKey(res.geminiApiKey);
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.session?.get(['geminiApiKey', 'apiKey']).then(res => {
+        const k = res?.geminiApiKey || res?.apiKey;
+        if (k) {
+          setGeminiKey(k);
           setIsConnected(true);
+        } else {
+          chrome.storage.local?.get(['geminiApiKey', 'apiKey']).then(lres => {
+            const lk = lres?.geminiApiKey || lres?.apiKey;
+            if (lk) {
+              setGeminiKey(lk);
+              setIsConnected(true);
+            }
+          });
         }
       }).catch(() => { });
     }
@@ -235,7 +245,7 @@ function PopupApp() {
             geminiApiKey: geminiKey,
             aiApiKey: geminiKey,
             aiProvider,
-          }).catch(() => {});
+          }).catch(() => { });
         }
         setIsConnected(true);
         setIsAIEnabled(true);
@@ -275,7 +285,7 @@ function PopupApp() {
           geminiApiKey: geminiKey,
           aiApiKey: geminiKey,
           aiProvider,
-        }).catch(() => {});
+        }).catch(() => { });
       }
       notify('success', 'Settings saved');
       setView('main');
@@ -392,8 +402,8 @@ function PopupApp() {
                 aiProvider === 'gemini'
                   ? GEMINI_MODELS.map(m => ({ value: m.id, label: m.label }))
                   : aiProvider === 'openai'
-                  ? OPENAI_MODELS.map(m => ({ value: m.id, label: m.label }))
-                  : CLAUDE_MODELS.map(m => ({ value: m.id, label: m.label }))
+                    ? OPENAI_MODELS.map(m => ({ value: m.id, label: m.label }))
+                    : CLAUDE_MODELS.map(m => ({ value: m.id, label: m.label }))
               }
             />
 
