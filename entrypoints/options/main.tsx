@@ -2,11 +2,11 @@
 // FILL PRO — Settings / Options Page Entry Point
 // ============================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Settings, Sparkles, Sliders, FileText, Shield, Info,
-  CheckCircle, AlertCircle, Loader2, Trash2, Download, Upload, Eye, EyeOff, ExternalLink,
+  CheckCircle, AlertCircle, Loader2, Trash2, Download, Upload, Eye, EyeOff, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import { Button, Badge, Card, Input, Select, Toggle, SectionHeader, cn } from '../../src/components/ui/index.js';
 import { DEFAULT_SETTINGS, GEMINI_MODELS, OPENAI_MODELS, CLAUDE_MODELS, AI_PROVIDERS, EXTENSION_VERSION, PUBLISHER, REPO_URL } from '../../src/constants/defaults.js';
@@ -208,21 +208,48 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [fetchedModels, setFetchedModels] = useState<Array<{ id: string; label: string; recommended?: boolean }>>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+
+  const fetchModels = useCallback(async (keyToUse?: string, provToUse?: string) => {
+    const k = keyToUse ?? apiKey;
+    const p = provToUse ?? (settings.ai.provider || 'gemini');
+    if (!k) return;
+    setFetchingModels(true);
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: 'FETCH_AI_MODELS',
+        payload: { provider: p, apiKey: k },
+      });
+      if (res?.success && res.models?.length > 0) {
+        setFetchedModels(res.models);
+      }
+    } catch (err) {
+      console.warn('[FillPro] Failed to fetch models:', err);
+    } finally {
+      setFetchingModels(false);
+    }
+  }, [apiKey, settings.ai.provider]);
 
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.session?.get(['geminiApiKey', 'apiKey']).then(res => {
         const k = res?.geminiApiKey || res?.apiKey;
-        if (k) setApiKey(k);
-        else {
+        if (k) {
+          setApiKey(k);
+          fetchModels(k);
+        } else {
           chrome.storage.local?.get(['geminiApiKey', 'apiKey']).then(lres => {
             const lk = lres?.geminiApiKey || lres?.apiKey;
-            if (lk) setApiKey(lk);
+            if (lk) {
+              setApiKey(lk);
+              fetchModels(lk);
+            }
           });
         }
       }).catch(() => {});
     }
-  }, []);
+  }, [fetchModels]);
 
   const handleTestConnection = async () => {
     if (!apiKey) return;
@@ -243,6 +270,7 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
         await chrome.storage.session?.set({ geminiApiKey: apiKey, apiKey });
         await chrome.storage.local?.set({ geminiApiKey: apiKey, apiKey });
         update(['ai', 'enabled'], true);
+        fetchModels(apiKey);
         if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
           chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' }).catch(() => {});
         }
@@ -259,6 +287,7 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
     await chrome.storage.local?.remove(['geminiApiKey', 'apiKey']);
     setApiKey('');
     setTestResult(null);
+    setFetchedModels([]);
     update(['ai', 'enabled'], false);
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' }).catch(() => {});
@@ -272,12 +301,22 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
       if (trimmed) {
         chrome.storage.session?.set({ geminiApiKey: trimmed, apiKey: trimmed }).catch(() => {});
         chrome.storage.local?.set({ geminiApiKey: trimmed, apiKey: trimmed }).catch(() => {});
+        fetchModels(trimmed);
       } else {
         chrome.storage.session?.remove(['geminiApiKey', 'apiKey']).catch(() => {});
         chrome.storage.local?.remove(['geminiApiKey', 'apiKey']).catch(() => {});
+        setFetchedModels([]);
       }
     }
   };
+
+  const modelOptions = fetchedModels.length > 0
+    ? fetchedModels.map(m => ({ value: m.id, label: m.label }))
+    : settings.ai.provider === 'openai'
+    ? OPENAI_MODELS.map(m => ({ value: m.id, label: m.label }))
+    : settings.ai.provider === 'claude'
+    ? CLAUDE_MODELS.map(m => ({ value: m.id, label: m.label }))
+    : GEMINI_MODELS.map(m => ({ value: m.id, label: m.label }));
 
   return (
     <div className="space-y-6">
@@ -305,6 +344,7 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
               if (prov === 'gemini') update(['ai', 'model'], 'gemini-3.5-flash');
               else if (prov === 'openai') update(['ai', 'model'], 'gpt-4o-mini');
               else if (prov === 'claude') update(['ai', 'model'], 'claude-3-5-haiku-20241022');
+              fetchModels(apiKey, prov);
             }}
             options={AI_PROVIDERS.map(p => ({ value: p.id, label: p.label }))}
           />
@@ -322,7 +362,7 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
                   ? 'sk-ant-...'
                   : 'AIzaSy... or AQ....'
               }
-              hint="Your key is stored in session memory only and never sent to third-party tracking servers."
+              hint="Your key is stored in session and local extension storage and never sent to third-party tracking servers."
             />
             <button
               className="absolute right-3 top-7 text-white/40 hover:text-white"
@@ -333,18 +373,32 @@ function AITab({ settings, update }: { settings: AppSettings; update: (path: str
             </button>
           </div>
 
-          <Select
-            label="Model"
-            value={settings.ai.model}
-            onChange={(e) => update(['ai', 'model'], e.target.value)}
-            options={
-              settings.ai.provider === 'openai'
-                ? OPENAI_MODELS.map(m => ({ value: m.id, label: m.label }))
-                : settings.ai.provider === 'claude'
-                ? CLAUDE_MODELS.map(m => ({ value: m.id, label: m.label }))
-                : GEMINI_MODELS.map(m => ({ value: m.id, label: m.label }))
-            }
-          />
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-white/70">Model</label>
+              {apiKey && (
+                <button
+                  type="button"
+                  onClick={() => fetchModels()}
+                  disabled={fetchingModels}
+                  className="text-[11px] text-brand-indigo hover:text-brand-violet flex items-center gap-1 transition-colors"
+                >
+                  <RefreshCw className={cn("w-3 h-3", fetchingModels && "animate-spin")} />
+                  <span>{fetchingModels ? 'Fetching...' : 'Fetch Models from Key'}</span>
+                </button>
+              )}
+            </div>
+            <Select
+              value={settings.ai.model}
+              onChange={(e) => update(['ai', 'model'], e.target.value)}
+              options={modelOptions}
+            />
+            {fetchedModels.length > 0 && (
+              <p className="text-[11px] text-green-400/80">
+                ✓ {fetchedModels.length} models fetched dynamically using your API key.
+              </p>
+            )}
+          </div>
 
           <div className="flex gap-2">
             <Button

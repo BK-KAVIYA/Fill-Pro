@@ -11,7 +11,7 @@ import type {
 } from '../src/types/index.js';
 import { DEFAULT_SETTINGS, EXTENSION_VERSION } from '../src/constants/defaults.js';
 import { loadSettings, saveSettings } from '../src/database/db.js';
-import { createAIProvider } from '../src/ai/providers/gemini.js';
+import { createAIProvider, fetchAvailableModels } from '../src/ai/providers/gemini.js';
 import { sessionGet, sessionSet, sessionRemove } from '../src/messaging/index.js';
 import { generateDocument } from '../src/engines/documents/documentGenerator.js';
 
@@ -179,6 +179,25 @@ async function handleMessage(
         return { success: false, error: 'Provider does not support generateValues' };
       } catch (err: any) {
         return { success: false, error: String(err?.message || err) };
+      }
+    }
+
+    case 'FETCH_AI_MODELS': {
+      try {
+        const { provider = 'gemini', apiKey } = message.payload || {};
+        let key = apiKey;
+        if (!key && chrome.storage?.session) {
+          const sRes = await chrome.storage.session.get(['geminiApiKey', 'apiKey']);
+          key = sRes?.geminiApiKey || sRes?.apiKey || '';
+        }
+        if (!key && chrome.storage?.local) {
+          const lRes = await chrome.storage.local.get(['geminiApiKey', 'apiKey']);
+          key = lRes?.geminiApiKey || lRes?.apiKey || '';
+        }
+        const models = await fetchAvailableModels(provider, key);
+        return { success: true, models };
+      } catch (err: any) {
+        return { success: false, error: String(err?.message || err), models: [] };
       }
     }
 

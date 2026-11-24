@@ -53,25 +53,56 @@ export interface AIProvider {
 
 export class GeminiProvider implements AIProvider {
   id = 'gemini';
+  private client: GoogleGenerativeAI;
   private model: GenerativeModel;
   private modelId: string;
 
   constructor(apiKey: string, modelId: string = 'gemini-3.5-flash') {
     if (!apiKey) throw new Error('Gemini API key is required');
-    const client = new GoogleGenerativeAI(apiKey);
-    // Auto-migrate legacy 1.5 or unavailable model names to modern active models
-    let resolvedModel = modelId;
-    if (resolvedModel.includes('1.5') || resolvedModel.includes('2.0') || resolvedModel === 'gemini-2.5-flash' || resolvedModel === 'gemini-flash-latest') {
+    this.client = new GoogleGenerativeAI(apiKey);
+    let resolvedModel = modelId || 'gemini-3.5-flash';
+    if (resolvedModel.includes('1.5') || resolvedModel === 'gemini-2.0-flash') {
       resolvedModel = 'gemini-3.5-flash';
     }
     this.modelId = resolvedModel;
-    this.model = client.getGenerativeModel({ model: resolvedModel });
+    this.model = this.client.getGenerativeModel({ model: resolvedModel });
+  }
+
+  private getFallbackModels(): string[] {
+    const list = [this.modelId, 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
+    return list.filter((m, i, arr) => arr.indexOf(m) === i);
+  }
+
+  private async generateWithFallback(
+    params: { contents: any[]; generationConfig?: any } | string,
+    errorPrefix: string
+  ): Promise<any> {
+    const models = this.getFallbackModels();
+    let lastError: any = null;
+
+    for (const mId of models) {
+      try {
+        const modelInstance = this.client.getGenerativeModel({ model: mId });
+        const result = await modelInstance.generateContent(params as any);
+        return result;
+      } catch (err: any) {
+        lastError = err;
+        const msg = String(err?.message || err);
+        // If it's a 503 (high demand) or 429 (rate limit) or 404 (not found), try next fallback
+        if (msg.includes('503') || msg.includes('429') || msg.includes('404') || msg.includes('high demand') || msg.includes('RESOURCE_EXHAUSTED')) {
+          console.warn(`[FillPro Gemini] Model ${mId} failed (${msg}), automatically trying fallback model...`);
+          continue;
+        }
+        throw new Error(`${errorPrefix}: ${msg}`);
+      }
+    }
+    throw new Error(`${errorPrefix}: All fallback models exhausted. Last error: ${String(lastError?.message || lastError)}`);
   }
 
   async validateConnection(): Promise<ConnectionResult> {
     const start = Date.now();
     try {
-      const result = await this.model.generateContent('Reply with only the word "connected"');
+      const result = await this.generateWithFallback('Reply with only the word "connected"', 'Validation');
       const text = result.response.text().toLowerCase().trim();
       return {
         success: text.includes('connected'),
@@ -133,21 +164,21 @@ Rules:
 - Never return executable code`;
 
     try {
-      const result = await this.model.generateContent({
+      const result = await this.generateWithFallback({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: 'application/json',
           temperature: 0.1,
           maxOutputTokens: 2048,
         },
-      });
+      }, 'Gemini analysis failed');
 
       const text = result.response.text();
       const parsed = JSON.parse(text);
       const validated = FormAnalysisResultSchema.parse(parsed);
       return validated;
-    } catch (err) {
-      throw new Error(`Gemini analysis failed: ${String(err)}`);
+    } catch (err: any) {
+      throw new Error(`Gemini analysis failed: ${String(err?.message || err)}`);
     }
   }
 
@@ -173,19 +204,19 @@ Rules:
 - Return ONLY the JSON object.`;
 
     try {
-      const result = await this.model.generateContent({
+      const result = await this.generateWithFallback({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: 'application/json',
           temperature: 0.2,
           maxOutputTokens: 2048,
         },
-      });
+      }, 'Gemini generateValues failed');
       const text = result.response.text();
       const parsed = JSON.parse(text);
       return parsed.values || parsed;
-    } catch (err) {
-      throw new Error(`Gemini generateValues failed: ${String(err)}`);
+    } catch (err: any) {
+      throw new Error(`Gemini generateValues failed: ${String(err?.message || err)}`);
     }
   }
 }
@@ -457,4 +488,84 @@ export function createAIProvider(
     return new ClaudeProvider(apiKey, modelId || 'claude-3-5-haiku-20241022');
   }
   return new LocalProvider();
+}
+
+// ---- Dynamic Model Fetcher ----
+export async function fetchAvailableModels(
+  provider: 'gemini' | 'openai' | 'claude',
+  apiKey: string
+): Promise<Array<{ id: string; label: string; recommended?: boolean }>> {
+  if (!apiKey) return [];
+
+  if (provider === 'gemini') {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const models: Array<{ id: string; label: string; recommended?: boolean }> = [];
+      const excluded = ['tts', 'image', 'clip', 'robotics', 'transcribe', 'computer-use'];
+      for (const m of (data.models || [])) {
+        const id = m.name?.replace('models/', '') || '';
+        const methods = m.supportedGenerationMethods || [];
+        if (methods.includes('generateContent') && !excluded.some(ex => id.includes(ex))) {
+          const name = m.displayName && m.displayName !== id ? `${m.displayName} (${id})` : id;
+          models.push({
+            id,
+            label: name,
+            recommended: id === 'gemini-3.5-flash' || id === 'gemini-2.5-flash',
+          });
+        }
+      }
+      return models.sort((a, b) => {
+        if (a.recommended && !b.recommended) return -1;
+        if (!a.recommended && b.recommended) return 1;
+        return a.id.localeCompare(b.id);
+      });
+    } catch (err) {
+      console.warn('[FillPro] Failed to fetch Gemini models:', err);
+      return [];
+    }
+  }
+
+  if (provider === 'openai') {
+    try {
+      const res = await fetch('https://api.openai.com/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const models = (data.data || [])
+        .filter((m: any) => m.id?.startsWith('gpt-'))
+        .map((m: any) => ({
+          id: m.id,
+          label: m.id,
+          recommended: m.id === 'gpt-4o-mini' || m.id === 'gpt-4o',
+        }))
+        .sort((a: any, b: any) => {
+          if (a.recommended && !b.recommended) return -1;
+          if (!a.recommended && b.recommended) return 1;
+          return a.id.localeCompare(b.id);
+        });
+      return models;
+    } catch (err) {
+      console.warn('[FillPro] Failed to fetch OpenAI models:', err);
+      return [];
+    }
+  }
+
+  if (provider === 'claude') {
+    return [
+      { id: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (Fast)', recommended: true },
+      { id: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (Most Intelligent)', recommended: false },
+      { id: 'claude-3-opus-20240229', label: 'Claude 3 Opus', recommended: false },
+    ];
+  }
+
+  return [];
 }
