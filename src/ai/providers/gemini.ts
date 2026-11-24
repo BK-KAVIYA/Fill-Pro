@@ -29,10 +29,26 @@ const FormAnalysisResultSchema = z.object({
 });
 
 // ---- Provider ----
+export interface GenerateValuesRequest {
+  fields: Array<{
+    id: string;
+    label?: string;
+    fieldName?: string;
+    placeholder?: string;
+    htmlType?: string;
+    controlType?: string;
+    options?: any;
+  }>;
+  instruction?: string;
+  locale?: string;
+  scenario?: string;
+}
+
 export interface AIProvider {
   id: string;
   validateConnection(): Promise<ConnectionResult>;
   analyzeForm(request: FormAnalysisRequest): Promise<FormAnalysisResult>;
+  generateValues?(request: GenerateValuesRequest): Promise<Record<string, any>>;
 }
 
 export class GeminiProvider implements AIProvider {
@@ -134,6 +150,44 @@ Rules:
       throw new Error(`Gemini analysis failed: ${String(err)}`);
     }
   }
+
+  async generateValues(request: GenerateValuesRequest): Promise<Record<string, any>> {
+    const prompt = `You are an intelligent form filling engine. Generate realistic form values matching the user's instructions.
+Instruction: ${request.instruction || 'Fill all fields with realistic and valid test data'}
+Locale: ${request.locale || 'en-US'}
+Scenario: ${request.scenario || 'valid_data'}
+
+Form fields to fill:
+${JSON.stringify(request.fields, null, 2)}
+
+Respond with ONLY valid JSON with this exact structure:
+{
+  "values": {
+    "fieldId": "generated value"
+  }
+}
+Rules:
+- Generate values for each field that match its label, type, and the user instruction.
+- If a field has options, choose one of the available option values.
+- Do NOT generate passwords or real sensitive financial data.
+- Return ONLY the JSON object.`;
+
+    try {
+      const result = await this.model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+          maxOutputTokens: 2048,
+        },
+      });
+      const text = result.response.text();
+      const parsed = JSON.parse(text);
+      return parsed.values || parsed;
+    } catch (err) {
+      throw new Error(`Gemini generateValues failed: ${String(err)}`);
+    }
+  }
 }
 
 // ---- OpenAI Provider ----
@@ -207,6 +261,45 @@ export class OpenAIProvider implements AIProvider {
     if (!res.ok) throw new Error(data.error?.message || 'OpenAI request failed');
     const parsed = JSON.parse(data.choices[0].message.content);
     return FormAnalysisResultSchema.parse(parsed);
+  }
+
+  async generateValues(request: GenerateValuesRequest): Promise<Record<string, any>> {
+    const prompt = `You are an intelligent form filling engine. Generate realistic form values matching the user's instructions.
+Instruction: ${request.instruction || 'Fill all fields with realistic and valid test data'}
+Locale: ${request.locale || 'en-US'}
+Scenario: ${request.scenario || 'valid_data'}
+
+Form fields to fill:
+${JSON.stringify(request.fields, null, 2)}
+
+Respond with ONLY valid JSON with this exact structure:
+{
+  "values": {
+    "fieldId": "generated value"
+  }
+}
+Rules:
+- Generate values for each field that match its label, type, and the user instruction.
+- If a field has options, choose one of the available option values.
+- Do NOT generate passwords or real sensitive data.`;
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelId,
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'OpenAI generation failed');
+    const parsed = JSON.parse(data.choices[0].message.content);
+    return parsed.values || parsed;
   }
 }
 
@@ -285,6 +378,50 @@ export class ClaudeProvider implements AIProvider {
     const parsed = JSON.parse(data.content[0].text);
     return FormAnalysisResultSchema.parse(parsed);
   }
+
+  async generateValues(request: GenerateValuesRequest): Promise<Record<string, any>> {
+    const prompt = `You are an intelligent form filling engine. Generate realistic form values matching the user's instructions.
+Instruction: ${request.instruction || 'Fill all fields with realistic and valid test data'}
+Locale: ${request.locale || 'en-US'}
+Scenario: ${request.scenario || 'valid_data'}
+
+Form fields to fill:
+${JSON.stringify(request.fields, null, 2)}
+
+Respond with ONLY valid JSON with this exact structure (no markdown, no extra text):
+{
+  "values": {
+    "fieldId": "generated value"
+  }
+}
+Rules:
+- Generate values for each field that match its label, type, and the user instruction.
+- If a field has options, choose one of the available option values.
+- Do NOT generate passwords or real sensitive data.`;
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01',
+        'dangerously-allow-browser': 'true',
+      },
+      body: JSON.stringify({
+        model: this.modelId,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2048,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'Claude generation failed');
+    let text = data.content[0].text.trim();
+    if (text.startsWith('```')) {
+      text = text.replace(/^```[a-z]*\n?/i, '').replace(/```$/, '').trim();
+    }
+    const parsed = JSON.parse(text);
+    return parsed.values || parsed;
+  }
 }
 
 // ---- Local (no-AI) Provider ----
@@ -297,6 +434,10 @@ export class LocalProvider implements AIProvider {
 
   async analyzeForm(_request: FormAnalysisRequest): Promise<FormAnalysisResult> {
     return { fields: [] };
+  }
+
+  async generateValues(_request: GenerateValuesRequest): Promise<Record<string, any>> {
+    return {};
   }
 }
 

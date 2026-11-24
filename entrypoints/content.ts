@@ -199,7 +199,11 @@ async function executeplan(plan: ExecutionPlan): Promise<ExecutionReport> {
     };
     chrome.runtime.sendMessage({ type: 'EXECUTION_PROGRESS', payload: progressEvent }).catch(() => {});
 
-    const result = await fillField(field, dataCtx, ctx);
+    // Check if an AI or custom value was provided in plan.actions
+    const planAction = plan.actions?.find(a => a.fieldId === field.id || a.fieldId === field.fieldName);
+    const customValue = planAction?.value;
+
+    const result = await fillField(field, dataCtx, ctx, customValue);
     fieldResults.push(result);
 
     // Dismiss any non-essential popups that might have appeared
@@ -246,7 +250,8 @@ async function executeplan(plan: ExecutionPlan): Promise<ExecutionReport> {
 async function fillField(
   field: FieldDescriptor,
   dataCtx: TestDataContext,
-  ctx: { sessionId: string; locale: string; abortSignal: AbortSignal }
+  ctx: { sessionId: string; locale: string; abortSignal: AbortSignal },
+  customValue?: any
 ): Promise<FillResult> {
   const start = performance.now();
 
@@ -269,7 +274,16 @@ async function fillField(
 
   // Generate value
   let generated;
-  if (field.controlType === 'file') {
+  if (customValue !== undefined && customValue !== null && customValue !== '') {
+    generated = {
+      fieldId: field.id,
+      value: customValue,
+      displayValue: String(customValue),
+      generatorId: 'ai-assistant',
+      semanticType: field.semanticType,
+      locale: dataCtx.locale,
+    };
+  } else if (field.controlType === 'file') {
     const fileField = field as any;
     const extensions: string[] = fileField.acceptedExtensions ?? [];
     let format = 'pdf';

@@ -149,11 +149,88 @@ function AIAssistantTab() {
   const [instruction, setInstruction] = useState('');
   const [locale, setLocale] = useState('en-LK');
   const [scenario, setScenario] = useState('valid_data');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const localeOptions = Object.values(LOCALE_PROFILES).map(l => ({ value: l.id, label: l.label }));
 
+  const handleAnalyse = async () => {
+    if (!scanResult) return;
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    try {
+      const fieldsSummary = scanResult.fields.map(f => ({
+        id: f.id,
+        label: f.label || f.fieldName,
+        fieldName: f.fieldName,
+        placeholder: f.placeholder,
+        htmlType: f.htmlType,
+        controlType: f.controlType,
+        section: f.section,
+        description: f.description,
+      }));
+
+      const res = await chrome.runtime.sendMessage({
+        type: 'ANALYZE_FORM',
+        payload: {
+          fields: fieldsSummary,
+          url: scanResult.origin,
+          pageTitle: document.title,
+        },
+      });
+
+      if (res && res.success && res.result) {
+        setAnalysisResult(res.result);
+      } else {
+        setAnalysisError(res?.error || 'Analysis failed. Check your API key in Settings.');
+      }
+    } catch (err: any) {
+      setAnalysisError(String(err?.message || err));
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleExecute = async () => {
     if (!scanResult) return;
+    let actions: any[] = [];
+
+    // If AI is enabled, generate context-aware field values using the LLM
+    if (isAIEnabled) {
+      try {
+        const fieldsSummary = scanResult.fields.map(f => ({
+          id: f.id,
+          label: f.label || f.fieldName,
+          fieldName: f.fieldName,
+          placeholder: f.placeholder,
+          htmlType: f.htmlType,
+          controlType: f.controlType,
+          options: (f as any).options,
+        }));
+
+        const aiRes = await chrome.runtime.sendMessage({
+          type: 'GENERATE_AI_VALUES',
+          payload: {
+            fields: fieldsSummary,
+            instruction: instruction || 'Fill form with realistic, valid test data',
+            locale,
+            scenario,
+          },
+        });
+
+        if (aiRes && aiRes.success && aiRes.values) {
+          actions = Object.entries(aiRes.values).map(([fieldId, value]) => ({
+            fieldId,
+            actionType: 'fill',
+            value,
+          }));
+        }
+      } catch (err) {
+        console.warn('[FillPro] AI generation error, falling back to local engine:', err);
+      }
+    }
+
     await sendMessage({
       type: 'EXECUTE_PLAN',
       payload: {
@@ -161,7 +238,7 @@ function AIAssistantTab() {
         origin: scanResult.origin,
         scenario: scenario as 'valid_data',
         locale,
-        actions: [],
+        actions,
         submitForm: false,
         preserveExisting: false,
         scope: 'all',
@@ -218,6 +295,44 @@ function AIAssistantTab() {
         </div>
       )}
 
+      {analysisResult && (
+        <Card className="border border-brand-indigo/30 bg-brand-indigo/5 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-white flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-brand-indigo" />
+              AI Form Analysis
+            </span>
+            {analysisResult.suggestedLocale && (
+              <Badge variant="neutral">{analysisResult.suggestedLocale}</Badge>
+            )}
+          </div>
+          {analysisResult.formPurpose && (
+            <p className="text-xs text-white/80">
+              <span className="font-medium text-white/50">Purpose: </span>
+              {analysisResult.formPurpose}
+            </p>
+          )}
+          {analysisResult.businessDomain && (
+            <p className="text-xs text-white/80">
+              <span className="font-medium text-white/50">Domain: </span>
+              {analysisResult.businessDomain}
+            </p>
+          )}
+          {analysisResult.fields && (
+            <p className="text-[11px] text-white/40">
+              {analysisResult.fields.length} fields classified with AI semantic metadata.
+            </p>
+          )}
+        </Card>
+      )}
+
+      {analysisError && (
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+          <span>{analysisError}</span>
+        </div>
+      )}
+
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-white/70 mb-1.5">Natural Language Instruction</label>
@@ -255,11 +370,12 @@ function AIAssistantTab() {
           variant="secondary"
           size="sm"
           className="flex-1"
-          onClick={() => {}}
-          icon={<ScanSearch className="w-4 h-4" />}
-          disabled={!scanResult}
+          onClick={handleAnalyse}
+          icon={isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanSearch className="w-4 h-4" />}
+          disabled={!scanResult || isAnalyzing}
+          loading={isAnalyzing}
         >
-          Analyse Form
+          {isAnalyzing ? 'Analyzing...' : 'Analyse Form'}
         </Button>
         <Button
           variant="primary"
@@ -812,7 +928,7 @@ function SidePanelApp() {
                       general: { ...s.general, theme: newTheme }
                     });
                   }
-                } catch {}
+                } catch { }
               }}
               aria-label="Toggle theme"
             >

@@ -127,6 +127,61 @@ async function handleMessage(
       }
     }
 
+    case 'ANALYZE_FORM': {
+      try {
+        const { fields, pageTitle, formTitle, url } = message.payload;
+        const settings = await loadSettings();
+        const providerType = settings?.ai?.provider || 'gemini';
+        const modelId = settings?.ai?.model;
+        let apiKey = '';
+        if (chrome.storage?.session) {
+          const sRes = await chrome.storage.session.get(['geminiApiKey', 'apiKey']);
+          apiKey = sRes?.geminiApiKey || sRes?.apiKey || '';
+        }
+        if (!apiKey && chrome.storage?.local) {
+          const lRes = await chrome.storage.local.get(['geminiApiKey', 'apiKey']);
+          apiKey = lRes?.geminiApiKey || lRes?.apiKey || '';
+        }
+        const provider = createAIProvider(providerType as any, apiKey, modelId);
+        const result = await provider.analyzeForm({
+          formId: 'form-1',
+          url: url || '',
+          pageTitle,
+          formTitle,
+          fields: fields || [],
+        });
+        return { success: true, result };
+      } catch (err: any) {
+        return { success: false, error: String(err?.message || err) };
+      }
+    }
+
+    case 'GENERATE_AI_VALUES': {
+      try {
+        const { fields, instruction, locale, scenario } = message.payload;
+        const settings = await loadSettings();
+        const providerType = settings?.ai?.provider || 'gemini';
+        const modelId = settings?.ai?.model;
+        let apiKey = '';
+        if (chrome.storage?.session) {
+          const sRes = await chrome.storage.session.get(['geminiApiKey', 'apiKey']);
+          apiKey = sRes?.geminiApiKey || sRes?.apiKey || '';
+        }
+        if (!apiKey && chrome.storage?.local) {
+          const lRes = await chrome.storage.local.get(['geminiApiKey', 'apiKey']);
+          apiKey = lRes?.geminiApiKey || lRes?.apiKey || '';
+        }
+        const provider = createAIProvider(providerType as any, apiKey, modelId);
+        if (provider.generateValues) {
+          const values = await provider.generateValues({ fields, instruction, locale, scenario });
+          return { success: true, values };
+        }
+        return { success: false, error: 'Provider does not support generateValues' };
+      } catch (err: any) {
+        return { success: false, error: String(err?.message || err) };
+      }
+    }
+
     case 'GET_SETTINGS': {
       const settings = await loadSettings();
       return settings ?? DEFAULT_SETTINGS;
