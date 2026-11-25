@@ -108,15 +108,23 @@ async function handleMessage(
       if (!tid) return { error: 'No active tab' };
 
       await ensureContentScript(tid);
-      await chrome.tabs.sendMessage(tid, { type: 'DO_EXECUTE', payload: plan });
-      return { started: true };
+      try {
+        await chrome.tabs.sendMessage(tid, { type: 'DO_EXECUTE', payload: plan });
+        return { started: true };
+      } catch {
+        return { error: 'Could not connect to page. Refresh the tab and try again.' };
+      }
     }
 
     case 'UNDO_SESSION': {
       const tid = await getActiveTabId();
       if (!tid) return { error: 'No active tab' };
-      await chrome.tabs.sendMessage(tid, { type: 'DO_UNDO', payload: message.payload });
-      return { done: true };
+      try {
+        await chrome.tabs.sendMessage(tid, { type: 'DO_UNDO', payload: message.payload });
+        return { done: true };
+      } catch {
+        return { error: 'Could not connect to page.' };
+      }
     }
 
     case 'GENERATE_FILE': {
@@ -407,11 +415,15 @@ async function handleMessage(
       const tid = reqTabId && reqTabId !== 0 ? reqTabId : await getActiveTabId();
       if (!tid) return { error: 'No active tab' };
       await ensureContentScript(tid);
-      await chrome.tabs.sendMessage(tid, {
-        type: 'HIGHLIGHT_FIELD',
-        payload: { fieldId: (message as any).payload.fieldId },
-      });
-      return { done: true };
+      try {
+        await chrome.tabs.sendMessage(tid, {
+          type: 'HIGHLIGHT_FIELD',
+          payload: { fieldId: (message as any).payload.fieldId },
+        });
+        return { done: true };
+      } catch {
+        return { error: 'Could not highlight field on this page.' };
+      }
     }
 
     default:

@@ -512,14 +512,20 @@ function GenerationTab({ settings, update }: { settings: AppSettings; update: (p
             <Input
               label="Number Min"
               type="number"
-              value={settings.generation.defaultNumberMin}
-              onChange={(e) => update(['generation', 'defaultNumberMin'], parseInt(e.target.value))}
+              value={Number.isFinite(settings.generation.defaultNumberMin) ? settings.generation.defaultNumberMin : 0}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                update(['generation', 'defaultNumberMin'], Number.isNaN(v) ? 0 : v);
+              }}
             />
             <Input
               label="Number Max"
               type="number"
-              value={settings.generation.defaultNumberMax}
-              onChange={(e) => update(['generation', 'defaultNumberMax'], parseInt(e.target.value))}
+              value={Number.isFinite(settings.generation.defaultNumberMax) ? settings.generation.defaultNumberMax : 9999999}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                update(['generation', 'defaultNumberMax'], Number.isNaN(v) ? 0 : v);
+              }}
             />
           </div>
         </div>
