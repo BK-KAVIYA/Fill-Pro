@@ -2,6 +2,41 @@
 // FILL PRO — Core Type Definitions
 // ============================================================
 
+// ---- Generation & Smart Fill Modes ----
+export type GenerationMode = 'SMART_FILL' | 'QUICK_FILL' | 'CUSTOM_AI_FILL';
+
+export type SmartFillStage =
+  | 'scanning'
+  | 'understanding'
+  | 'resolving_fields'
+  | 'ai_classification'
+  | 'generating_data'
+  | 'preparing_documents'
+  | 'ready_for_review'
+  | 'filling'
+  | 'validating'
+  | 'recovering'
+  | 'saving_knowledge'
+  | 'complete';
+
+export type ResolutionSource =
+  | 'user_confirmed'
+  | 'knowledge_base'
+  | 'native'
+  | 'heuristic'
+  | 'ai'
+  | 'unresolved';
+
+export interface ResolutionStats {
+  userConfirmed: number;
+  knowledgeBase: number;
+  native: number;
+  heuristic: number;
+  ai: number;
+  unresolved: number;
+  total: number;
+}
+
 // ---- Control Types ----
 export type ControlType =
   | 'text'
@@ -412,11 +447,17 @@ export type ExtensionMessage =
   | { type: 'OPEN_SIDE_PANEL'; payload: { tabId: number } }
   | { type: 'GET_SETTINGS'; payload: Record<string, never> }
   | { type: 'SAVE_SETTINGS'; payload: Partial<AppSettings> }
-  | { type: 'TEST_AI_CONNECTION'; payload: { apiKey: string; model: string } }
-  | { type: 'AI_CONNECTION_RESULT'; payload: { success: boolean; error?: string } };
+  | { type: 'TEST_AI_CONNECTION'; payload: { apiKey: string; model: string; provider?: string } }
+  | { type: 'AI_CONNECTION_RESULT'; payload: { success: boolean; error?: string } }
+  | { type: 'SMART_FILL'; payload: { tabId?: number; mode: GenerationMode; locale: string; scenario: TestScenario; preserveExisting: boolean; generateDocuments: boolean; instruction?: string; autoExecute?: boolean } }
+  | { type: 'REGENERATE_FIELD'; payload: { field: FieldDescriptor; locale: string; scenario: TestScenario; instruction?: string; formPurpose?: string } }
+  | { type: 'CORRECT_FIELD_VALUE'; payload: { field: FieldDescriptor; currentValue: unknown; validationError: string; locale: string } }
+  | { type: 'SAVE_FIELD_MAPPING'; payload: { origin: string; formFingerprint: string; field: FieldDescriptor; semanticType: string; source: 'user_confirmed' | 'auto_learned' } }
+  | { type: 'HIGHLIGHT_FIELD'; payload: { tabId?: number; fieldId: string } };
 
 export interface ExecutionProgressEvent {
   sessionId: string;
+  stage?: SmartFillStage;
   currentAction: number;
   totalActions: number;
   currentFieldId?: string;
@@ -496,9 +537,11 @@ export interface AppSettings {
   general: {
     defaultLocale: string;
     defaultScenario: TestScenario;
+    defaultGenerationMode?: GenerationMode;
     preserveExistingValues: boolean;
     rememberMappings: boolean;
     previewBeforeFilling: boolean;
+    autoPrepareDocuments?: boolean;
     theme: 'light' | 'dark' | 'system';
   };
   ai: {

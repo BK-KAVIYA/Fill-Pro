@@ -190,11 +190,12 @@ async function executeplan(plan: ExecutionPlan): Promise<ExecutionReport> {
     // Send progress
     const progressEvent: ExecutionProgressEvent = {
       sessionId: plan.sessionId,
+      stage: 'filling',
       currentAction: i + 1,
       totalActions: fields.length,
       currentFieldId: field.id,
       currentFieldLabel: field.label ?? field.fieldName,
-      status: 'filling',
+      status: `Filling ${field.label ?? field.fieldName ?? 'field'}...`,
       percentage: Math.round(((i + 1) / fields.length) * 100),
     };
     chrome.runtime.sendMessage({ type: 'EXECUTION_PROGRESS', payload: progressEvent }).catch(() => {});
@@ -203,7 +204,7 @@ async function executeplan(plan: ExecutionPlan): Promise<ExecutionReport> {
     const planAction = plan.actions?.find(a => a.fieldId === field.id || a.fieldId === field.fieldName);
     const customValue = planAction?.value;
 
-    const result = await fillField(field, dataCtx, ctx, customValue);
+    const result = await fillField(field, dataCtx, ctx, customValue, plan.scenario);
     fieldResults.push(result);
 
     // Dismiss any non-essential popups that might have appeared
@@ -247,11 +248,75 @@ async function executeplan(plan: ExecutionPlan): Promise<ExecutionReport> {
   return report;
 }
 
+function getCurrentFieldValue(el: Element): string {
+  if ('files' in el && (el as HTMLInputElement).files && (el as HTMLInputElement).files!.length > 0) {
+    return (el as HTMLInputElement).files![0]?.name ?? '';
+  }
+  if ('value' in el) {
+    return String((el as HTMLInputElement).value ?? '');
+  }
+  if ((el as HTMLElement).isContentEditable) {
+    return (el as HTMLElement).textContent ?? '';
+  }
+  return '';
+}
+
+async function retryWithFrameworkEvents(el: Element, value: unknown): Promise<void> {
+  const strVal = String(value ?? '');
+  const proto =
+    el.tagName === 'TEXTAREA'
+      ? HTMLTextAreaElement.prototype
+      : el.tagName === 'SELECT'
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype;
+  const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  if (nativeSetter) {
+    nativeSetter.call(el, strVal);
+  } else if ('value' in el) {
+    (el as HTMLInputElement).value = strVal;
+  }
+  el.dispatchEvent(new Event('focus', { bubbles: true }));
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.dispatchEvent(new Event('blur', { bubbles: true }));
+  await sleep(60);
+}
+
+function applyLocalCorrection(field: FieldDescriptor, currentValue: any, errorMsg: string): any | null {
+  const str = String(currentValue.value ?? '');
+  if (field.constraints.maxLength && str.length > field.constraints.maxLength) {
+    const trimmed = str.substring(0, field.constraints.maxLength);
+    return { ...currentValue, value: trimmed, displayValue: trimmed };
+  }
+  if (field.controlType === 'number') {
+    const num = Number(str.replace(/[^0-9.-]/g, ''));
+    if (!isNaN(num)) {
+      const min = field.constraints.min !== undefined ? Number(field.constraints.min) : -Infinity;
+      const max = field.constraints.max !== undefined ? Number(field.constraints.max) : Infinity;
+      const clamped = Math.min(Math.max(num, min), max);
+      return { ...currentValue, value: clamped, displayValue: String(clamped) };
+    }
+  }
+  if (field.controlType === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str)) {
+    const fixed = `${str.replace(/[^a-zA-Z0-9._-]/g, '') || 'user'}@example.com`;
+    return { ...currentValue, value: fixed, displayValue: fixed };
+  }
+  if (field.controlType === 'url' && str && !/^https?:\/\//i.test(str)) {
+    const fixed = `https://${str}`;
+    return { ...currentValue, value: fixed, displayValue: fixed };
+  }
+  if (/required|empty|cannot be blank/i.test(errorMsg) && !str) {
+    return { ...currentValue, value: 'Sample Value', displayValue: 'Sample Value' };
+  }
+  return null;
+}
+
 async function fillField(
   field: FieldDescriptor,
   dataCtx: TestDataContext,
   ctx: { sessionId: string; locale: string; abortSignal: AbortSignal },
-  customValue?: any
+  customValue?: any,
+  scenario?: string
 ): Promise<FillResult> {
   const start = performance.now();
 
@@ -362,22 +427,91 @@ async function fillField(
   }
 
   // Fill
-  const result = await adapter.fill(resolved, generated, executionCtx);
+  let result = await adapter.fill(resolved, generated, executionCtx);
 
-  // Verify
-  if (result.status !== 'error' && result.status !== 'unsupported_component') {
-    const validation = validateFieldAfterFill(el, field);
-    if (validation.requiresRecovery) {
-      return attemptRecovery(
-        field,
-        validation.visibleErrors[0] ?? 'Validation failed',
-        generated,
-        adapter,
-        resolved,
-        executionCtx
-      );
+  // Do not auto-correct intentionally invalid test data
+  const isIntentionalInvalidScenario = scenario === 'negative_test' || scenario === 'boundary_test';
+
+  // Self-healing verification & recovery (max 3 attempts)
+  if (result.status !== 'error' && result.status !== 'unsupported_component' && field.controlType !== 'file') {
+    let attempts = 0;
+    let currentGen = generated;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await sleep(60);
+
+      // 1. Check if framework cleared the value
+      const retained = getCurrentFieldValue(el);
+      if (!retained && currentGen.value !== undefined && String(currentGen.value).trim() !== '' && field.controlType !== 'checkbox' && field.controlType !== 'toggle') {
+        attempts++;
+        await retryWithFrameworkEvents(el, currentGen.value);
+        continue;
+      }
+
+      // 2. Validate native validity & visible errors
+      const validation = validateFieldAfterFill(el, field);
+      if (!validation.requiresRecovery || isIntentionalInvalidScenario) {
+        return {
+          ...result,
+          attempts: Math.max(result.attempts, attempts),
+          status: attempts > 0 && validation.passed ? 'corrected_verified' : validation.status,
+          generatedValue: currentGen,
+        };
+      }
+
+      attempts++;
+      const errorMsg = validation.visibleErrors[0] ?? 'Validation failed';
+
+      // 3. Try local correction rules first
+      const localFixed = applyLocalCorrection(field, currentGen, errorMsg);
+      if (localFixed) {
+        currentGen = localFixed;
+        result = await adapter.fill(resolved, currentGen, executionCtx);
+        continue;
+      }
+
+      // 4. Fallback to built-in validator recovery strategies
+      const recovered = await attemptRecovery(field, errorMsg, currentGen, adapter, resolved, executionCtx, 1);
+      if (recovered.status === 'corrected_verified' || recovered.status === 'filled_verified') {
+        return { ...recovered, attempts };
+      }
+
+      // 5. Fallback to AI correction if available
+      try {
+        const aiResp: any = await chrome.runtime.sendMessage({
+          type: 'CORRECT_FIELD_VALUE',
+          payload: {
+            field,
+            currentValue: currentGen.value,
+            validationError: errorMsg,
+            locale: dataCtx.locale,
+          },
+        });
+        if (aiResp?.success && aiResp.value !== undefined) {
+          currentGen = {
+            ...currentGen,
+            value: aiResp.value,
+            displayValue: String(aiResp.value),
+            generatorId: 'ai-recovery',
+          };
+          result = await adapter.fill(resolved, currentGen, executionCtx);
+          continue;
+        }
+      } catch {
+        // AI unavailable
+      }
+
+      break;
     }
-    return { ...result, status: validation.status };
+
+    const finalValidation = validateFieldAfterFill(el, field);
+    return {
+      ...result,
+      attempts,
+      status: finalValidation.passed ? (attempts > 0 ? 'corrected_verified' : 'filled_verified') : 'validation_failed',
+      validationMessage: finalValidation.visibleErrors[0],
+      generatedValue: currentGen,
+    };
   }
 
   return result;

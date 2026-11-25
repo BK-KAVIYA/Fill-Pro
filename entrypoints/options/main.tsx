@@ -10,8 +10,9 @@ import {
 } from 'lucide-react';
 import { Button, Badge, Card, Input, Select, Toggle, SectionHeader, cn } from '../../src/components/ui/index.js';
 import { DEFAULT_SETTINGS, GEMINI_MODELS, OPENAI_MODELS, CLAUDE_MODELS, AI_PROVIDERS, EXTENSION_VERSION, PUBLISHER, REPO_URL } from '../../src/constants/defaults.js';
-import type { AppSettings } from '../../src/types/index.js';
+import type { AppSettings, ApplicationKnowledge } from '../../src/types/index.js';
 import { loadSettings, saveSettings } from '../../src/database/db.js';
+import { listAllKnowledge, removeKnowledgeMapping, clearAllKnowledge } from '../../src/database/knowledgeBase.js';
 import { LOCALE_PROFILES } from '../../src/constants/locales.js';
 import '../../src/styles/globals.css';
 
@@ -165,6 +166,17 @@ function GeneralTab({ settings, update }: { settings: AppSettings; update: (path
               { value: 'negative_test', label: 'Negative Testing' },
               { value: 'boundary_test', label: 'Boundary Testing' },
               { value: 'international', label: 'International' },
+            ]}
+          />
+
+          <Select
+            label="Default Generation Mode"
+            value={settings.general.defaultGenerationMode || 'SMART_FILL'}
+            onChange={(e) => update(['general', 'defaultGenerationMode'], e.target.value)}
+            options={[
+              { value: 'SMART_FILL', label: 'Smart Fill (AI + Local Intelligence)' },
+              { value: 'QUICK_FILL', label: 'Quick Fill (Local Generation Only)' },
+              { value: 'CUSTOM_AI_FILL', label: 'Custom AI Fill (Prompted)' },
             ]}
           />
 
@@ -572,9 +584,19 @@ function FilesTab({ settings, update }: { settings: AppSettings; update: (path: 
 
 // ---- Privacy Tab ----
 function PrivacyTab({ settings, update }: { settings: AppSettings; update: (path: string[], value: unknown) => void }) {
+  const [mappings, setMappings] = useState<ApplicationKnowledge[]>([]);
+
+  const loadMappings = useCallback(() => {
+    listAllKnowledge().then(setMappings).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadMappings();
+  }, [loadMappings]);
+
   return (
     <div className="space-y-6">
-      <SectionHeader title="Privacy & Security" subtitle="Control website access and data handling" />
+      <SectionHeader title="Privacy & Security" subtitle="Control website access, learned mappings, and data handling" />
 
       <Card>
         <div className="space-y-4">
@@ -608,16 +630,70 @@ function PrivacyTab({ settings, update }: { settings: AppSettings; update: (path
           </div>
 
           <div className="pt-2 space-y-2">
-            <Button variant="ghost" size="sm" icon={<Trash2 className="w-4 h-4" />} className="text-red-400 hover:text-red-300 w-full justify-start">
-              Clear Session History
-            </Button>
-            <Button variant="ghost" size="sm" icon={<Trash2 className="w-4 h-4" />} className="text-red-400 hover:text-red-300 w-full justify-start">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Trash2 className="w-4 h-4" />}
+              className="text-red-400 hover:text-red-300 w-full justify-start"
+              onClick={async () => {
+                await clearAllKnowledge();
+                loadMappings();
+              }}
+            >
               Clear Application Learning Data
             </Button>
-            <Button variant="ghost" size="sm" icon={<Trash2 className="w-4 h-4" />} className="text-red-400 hover:text-red-300 w-full justify-start">
-              Delete All Local Data
-            </Button>
           </div>
+        </div>
+      </Card>
+
+      {/* Learned Knowledge Base Mappings */}
+      <Card>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Learned Field Mappings</h3>
+              <p className="text-xs text-white/40">
+                Semantic classifications remembered per origin (no form values stored)
+              </p>
+            </div>
+            <Badge variant="info" size="sm">{mappings.length} saved</Badge>
+          </div>
+
+          {mappings.length === 0 ? (
+            <p className="text-xs text-white/30 py-3 text-center">No learned mappings yet.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-60 overflow-y-auto">
+              {mappings.map(m => (
+                <div
+                  key={m.id ?? `${m.origin}-${m.fieldFingerprint}`}
+                  className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/5 text-xs"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-white/80 truncate">{m.semanticType}</span>
+                      <Badge variant={m.source === 'user_confirmed' ? 'success' : 'default'} size="sm">
+                        {m.source}
+                      </Badge>
+                    </div>
+                    <p className="text-[10px] text-white/40 truncate">{m.origin}</p>
+                  </div>
+                  {m.id !== undefined && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await removeKnowledgeMapping(m.id!);
+                        loadMappings();
+                      }}
+                      className="p-1 text-white/40 hover:text-red-400 shrink-0"
+                      aria-label="Remove mapping"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </Card>
     </div>

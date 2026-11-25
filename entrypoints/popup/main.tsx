@@ -98,6 +98,7 @@ function PopupApp() {
   const [locale, setLocale] = useState('en-LK');
   const [scenario, setScenario] = useState('valid_data');
   const [preserveExisting, setPreserveExisting] = useState(false);
+  const [isSmartFilling, setIsSmartFilling] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Settings view state
@@ -183,6 +184,35 @@ function PopupApp() {
       setScanError('Failed to connect to the page. Please refresh the page and try again.');
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handleSmartFill = async () => {
+    if (!currentTabId || isChromePage || isExecuting || isSmartFilling) return;
+    setIsSmartFilling(true);
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: 'SMART_FILL',
+        payload: {
+          tabId: currentTabId,
+          mode: isAIEnabled ? 'SMART_FILL' : 'QUICK_FILL',
+          locale,
+          scenario,
+          preserveExisting,
+          generateDocuments: true,
+          autoExecute: true,
+        },
+      });
+      if (res?.scanResult) setScanResult(res.scanResult);
+      if (res?.error) {
+        notify('error', res.error);
+      } else {
+        notify('success', isAIEnabled ? 'Smart Fill completed!' : 'Quick Fill completed!');
+      }
+    } catch {
+      notify('error', 'Smart Fill failed');
+    } finally {
+      setIsSmartFilling(false);
     }
   };
 
@@ -623,10 +653,10 @@ function PopupApp() {
               {isAIEnabled && (
                 <QuickAction
                   icon={<Sparkles className="w-4 h-4" />}
-                  label="AI Fill"
-                  onClick={handleQuickFill}
-                  loading={isExecuting}
-                  variant="secondary"
+                  label={isSmartFilling ? 'Waiting for AI response...' : 'Smart Fill (AI)'}
+                  onClick={handleSmartFill}
+                  loading={isSmartFilling || isExecuting}
+                  variant="primary"
                 />
               )}
               <QuickAction

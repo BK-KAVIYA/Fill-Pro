@@ -5,21 +5,38 @@
 import { create } from 'zustand';
 import type {
   ScanResult,
-  FieldDescriptor,
-  TestDataContext,
   ExecutionReport,
   AppSettings,
   FillResult,
   ExecutionProgressEvent,
+  GenerationMode,
+  SmartFillStage,
+  ResolutionStats,
+  SemanticCategory,
 } from '../types/index.js';
+import type { ResolvedField } from '../ai/intelligenceRouter.js';
+import type { SmartFillPlan } from '../ai/smartFillOrchestrator.js';
 import { DEFAULT_SETTINGS } from '../constants/defaults.js';
 
 // ---- Scan Store ----
 interface ScanState {
   scanResult: ScanResult | null;
+  resolvedFields: ResolvedField[];
+  resolutionStats: ResolutionStats | null;
+  formPurpose: string | null;
+  businessDomain: string | null;
+  suggestedLocale: string | null;
+  formFingerprint: string | null;
+  smartFillPlan: SmartFillPlan | null;
+  proposedValues: Record<string, unknown>;
+  excludedFieldIds: string[];
   isScanning: boolean;
   scanError: string | null;
   setScanResult: (result: ScanResult) => void;
+  setSmartFillPlan: (plan: SmartFillPlan) => void;
+  setProposedValue: (fieldId: string, value: unknown) => void;
+  toggleExcludeField: (fieldId: string) => void;
+  updateFieldSemanticType: (fieldId: string, semanticType: string, semanticCategory: SemanticCategory) => void;
   setIsScanning: (val: boolean) => void;
   setScanError: (err: string | null) => void;
   clearScan: () => void;
@@ -27,21 +44,96 @@ interface ScanState {
 
 export const useScanStore = create<ScanState>((set) => ({
   scanResult: null,
+  resolvedFields: [],
+  resolutionStats: null,
+  formPurpose: null,
+  businessDomain: null,
+  suggestedLocale: null,
+  formFingerprint: null,
+  smartFillPlan: null,
+  proposedValues: {},
+  excludedFieldIds: [],
   isScanning: false,
   scanError: null,
-  setScanResult: (result) => set({ scanResult: result, scanError: null }),
+  setScanResult: (result) =>
+    set({
+      scanResult: result,
+      resolvedFields: result.fields.map(f => ({
+        ...f,
+        resolutionSource: f.classificationSource === 'native' ? 'native' : 'heuristic',
+      })),
+      scanError: null,
+    }),
+  setSmartFillPlan: (plan) =>
+    set({
+      smartFillPlan: plan,
+      resolvedFields: plan.resolvedFields,
+      resolutionStats: plan.stats,
+      formPurpose: plan.formPurpose,
+      businessDomain: plan.businessDomain,
+      suggestedLocale: plan.suggestedLocale ?? null,
+      formFingerprint: plan.formFingerprint,
+      proposedValues: { ...plan.proposedValues },
+    }),
+  setProposedValue: (fieldId, value) =>
+    set((s) => ({
+      proposedValues: { ...s.proposedValues, [fieldId]: value },
+      smartFillPlan: s.smartFillPlan
+        ? {
+            ...s.smartFillPlan,
+            proposedValues: { ...s.smartFillPlan.proposedValues, [fieldId]: value },
+          }
+        : null,
+    })),
+  toggleExcludeField: (fieldId) =>
+    set((s) => ({
+      excludedFieldIds: s.excludedFieldIds.includes(fieldId)
+        ? s.excludedFieldIds.filter(id => id !== fieldId)
+        : [...s.excludedFieldIds, fieldId],
+    })),
+  updateFieldSemanticType: (fieldId, semanticType, semanticCategory) =>
+    set((s) => ({
+      resolvedFields: s.resolvedFields.map(f =>
+        f.id === fieldId
+          ? {
+              ...f,
+              semanticType,
+              semanticCategory,
+              classificationSource: 'user_confirmed',
+              resolutionSource: 'user_confirmed',
+              confidence: 1,
+              confidenceBand: 'high',
+            }
+          : f
+      ),
+    })),
   setIsScanning: (val) => set({ isScanning: val }),
   setScanError: (err) => set({ scanError: err }),
-  clearScan: () => set({ scanResult: null, scanError: null }),
+  clearScan: () =>
+    set({
+      scanResult: null,
+      resolvedFields: [],
+      resolutionStats: null,
+      formPurpose: null,
+      businessDomain: null,
+      suggestedLocale: null,
+      formFingerprint: null,
+      smartFillPlan: null,
+      proposedValues: {},
+      excludedFieldIds: [],
+      scanError: null,
+    }),
 }));
 
 // ---- Execution Store ----
 interface ExecutionState {
   isExecuting: boolean;
+  smartFillStage: SmartFillStage | null;
   progress: ExecutionProgressEvent | null;
   report: ExecutionReport | null;
   fieldResults: FillResult[];
   setIsExecuting: (val: boolean) => void;
+  setSmartFillStage: (stage: SmartFillStage | null) => void;
   setProgress: (p: ExecutionProgressEvent) => void;
   setReport: (r: ExecutionReport) => void;
   addFieldResult: (r: FillResult) => void;
@@ -50,14 +142,23 @@ interface ExecutionState {
 
 export const useExecutionStore = create<ExecutionState>((set) => ({
   isExecuting: false,
+  smartFillStage: null,
   progress: null,
   report: null,
   fieldResults: [],
   setIsExecuting: (val) => set({ isExecuting: val }),
-  setProgress: (p) => set({ progress: p }),
-  setReport: (r) => set({ report: r }),
+  setSmartFillStage: (stage) => set({ smartFillStage: stage }),
+  setProgress: (p) => set({ progress: p, smartFillStage: p.stage ?? null }),
+  setReport: (r) => set({ report: r, smartFillStage: 'complete' }),
   addFieldResult: (r) => set((s) => ({ fieldResults: [...s.fieldResults, r] })),
-  reset: () => set({ isExecuting: false, progress: null, report: null, fieldResults: [] }),
+  reset: () =>
+    set({
+      isExecuting: false,
+      smartFillStage: null,
+      progress: null,
+      report: null,
+      fieldResults: [],
+    }),
 }));
 
 // ---- Settings Store ----
@@ -92,7 +193,7 @@ interface AIState {
 export const useAIStore = create<AIState>((set) => ({
   isAIEnabled: false,
   apiKey: null,
-  model: 'gemini-1.5-flash',
+  model: 'gemini-3.5-flash',
   isConnected: null,
   connectionError: null,
   requestCount: 0,
@@ -108,10 +209,14 @@ export const useAIStore = create<AIState>((set) => ({
 interface UIState {
   theme: 'light' | 'dark';
   activeTab: string;
+  generationMode: GenerationMode;
+  advancedOptionsOpen: boolean;
   selectedFieldId: string | null;
   highlightedFieldId: string | null;
   setTheme: (t: 'light' | 'dark') => void;
   setActiveTab: (tab: string) => void;
+  setGenerationMode: (mode: GenerationMode) => void;
+  setAdvancedOptionsOpen: (open: boolean) => void;
   setSelectedFieldId: (id: string | null) => void;
   setHighlightedFieldId: (id: string | null) => void;
 }
@@ -119,10 +224,14 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   theme: 'dark',
   activeTab: 'dashboard',
+  generationMode: 'SMART_FILL',
+  advancedOptionsOpen: false,
   selectedFieldId: null,
   highlightedFieldId: null,
   setTheme: (t) => set({ theme: t }),
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setGenerationMode: (mode) => set({ generationMode: mode }),
+  setAdvancedOptionsOpen: (open) => set({ advancedOptionsOpen: open }),
   setSelectedFieldId: (id) => set({ selectedFieldId: id }),
   setHighlightedFieldId: (id) => set({ highlightedFieldId: id }),
 }));

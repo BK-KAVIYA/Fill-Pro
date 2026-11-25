@@ -4,9 +4,9 @@ export default defineConfig({
   extensionApi: 'chrome',
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'Fill Pro',
+    name: 'Fill Pro - AI-powered form filler for developers and QA engineers',
     short_name: 'Fill Pro',
-    description: 'Understand Forms. Generate Data. Test Faster. AI-powered intelligent form filling for developers and QA engineers.',
+    description: 'AI-powered form filler for developers and QA engineers. Generate realistic test data, smart file attachments, and test forms faster.',
     version: '1.0.0',
     manifest_version: 3,
     permissions: [

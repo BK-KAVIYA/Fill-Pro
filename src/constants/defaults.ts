@@ -8,9 +8,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   general: {
     defaultLocale: 'en-LK',
     defaultScenario: 'valid_data',
+    defaultGenerationMode: 'SMART_FILL',
     preserveExistingValues: true,
     rememberMappings: true,
     previewBeforeFilling: false,
+    autoPrepareDocuments: true,
     theme: 'dark',
   },
   ai: {
