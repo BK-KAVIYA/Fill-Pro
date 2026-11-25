@@ -7,7 +7,7 @@ export default defineConfig({
     name: 'Fill Pro - AI-powered form filler for developers and QA engineers',
     short_name: 'Fill Pro',
     description: 'AI-powered form filler for developers and QA engineers. Generate realistic test data, smart file attachments, and test forms faster.',
-    version: '1.0.0',
+    version: '2.0.0',
     manifest_version: 3,
     permissions: [
       'activeTab',

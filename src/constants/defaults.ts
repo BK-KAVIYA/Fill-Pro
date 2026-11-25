@@ -69,6 +69,6 @@ export const AI_PROVIDERS = [
   { id: 'claude', label: 'Anthropic Claude', placeholder: 'sk-ant-...' },
 ];
 
-export const EXTENSION_VERSION = '1.0.0';
+export const EXTENSION_VERSION = '2.0.0';
 export const PUBLISHER = 'toolls.io';
 export const REPO_URL = 'https://github.com/toolls-io/fill-pro';
